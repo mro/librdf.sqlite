@@ -1183,30 +1183,25 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
 
     t_instance *db_ctx = get_instance(storage);
     const char *find_triples_sql = // generated via tools/sql2c.sh find_triples.sql
-                                   "-- result columns must match as used in pub_stream_get_statement" "\n" \
                                    "SELECT" "\n" \
                                    "  s_uri" "\n" \
                                    "  ,s_blank" "\n" \
                                    "  ,p_uri" "\n" \
                                    "  ,o_uri" "\n" \
                                    "  ,o_blank" "\n" \
-                                   "  ,o_text" "\n"           \
+                                   "  ,o_text" "\n" \
                                    "  ,o_language" "\n" \
                                    "  ,o_datatype" "\n" \
                                    "  ,c_uri" "\n" \
                                    "FROM spocs_full" "\n" \
                                    "WHERE" "\n" \
-                                   "-- subject" "\n" \
-                                   "      ((:s_type != :t_uri)         OR (s_uri = :s_uri))" "\n"         \
-                                   "AND ((:s_type != :t_blank)     OR (s_blank = :s_blank))" "\n" \
-                                   "-- predicate" "\n" \
-                                   "AND ((:p_type != :t_uri)       OR (p_uri = :p_uri))" "\n"         \
-                                   "-- object" "\n"           \
-                                   "AND ((:o_type != :t_uri)       OR (o_uri = :o_uri))" "\n"         \
-                                   "AND ((:o_type != :t_blank)     OR (o_blank = :o_blank))" "\n" \
+                                   "    ((:s_type != :t_uri)     OR (s_uri = :s_uri))" "\n" \
+                                   "AND ((:s_type != :t_blank)   OR (s_blank = :s_blank))" "\n" \
+                                   "AND ((:p_type != :t_uri)     OR (p_uri = :p_uri))" "\n" \
+                                   "AND ((:o_type != :t_uri)     OR (o_uri = :o_uri))" "\n" \
+                                   "AND ((:o_type != :t_blank)   OR (o_blank = :o_blank))" "\n" \
                                    "AND ((:o_type != :t_literal) OR (o_text = :o_text AND o_datatype = :o_datatype AND o_language = :o_language))" "\n" \
-                                   "-- context node" "\n" \
-                                   "AND ((:c_wild)                             OR (c_uri = :c_uri))" "\n"         \
+                                   "AND ((:c_wild)               OR (c_uri = :c_uri))" "\n" \
     ;
 
     sqlite3_stmt *stmt = NULL;
