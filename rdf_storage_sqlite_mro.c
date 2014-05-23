@@ -1280,16 +1280,6 @@ static int pub_size(librdf_storage *storage)
 #pragma mark Add
 
 
-/**
- * librdf_storage_sqlite_context_add_statement:
- * @storage: #librdf_storage object
- * @context_node: #librdf_node object
- * @statement: #librdf_statement statement to add
- *
- * Add a statement to a storage db_ctx.
- *
- * Return value: non 0 on failure
- **/
 static int pub_context_add_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement)
 {
     // librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
@@ -1347,28 +1337,28 @@ static void librdf_storage_sqlite_register_factory(librdf_storage_factory *facto
 {
     assert( !strcmp(factory->name, LIBRDF_STORAGE_SQLITE_MRO) );
 
-    factory->version                        = LIBRDF_STORAGE_INTERFACE_VERSION;
-    factory->init                               = pub_init;
+    factory->version                    = LIBRDF_STORAGE_INTERFACE_VERSION;
+    factory->init                       = pub_init;
     factory->terminate                  = pub_terminate;
-    factory->open                               = pub_open;
-    factory->close                          = pub_close;
-    factory->size                               = pub_size;
-    factory->add_statement          = pub_add_statement;
-    factory->add_statements         = pub_add_statements;
-    factory->remove_statement       = pub_remove_statement;
-    factory->contains_statement = pub_contains_statement;
+    factory->open                       = pub_open;
+    factory->close                      = pub_close;
+    factory->size                       = pub_size;
+    factory->add_statement              = pub_add_statement;
+    factory->add_statements             = pub_add_statements;
+    factory->remove_statement           = pub_remove_statement;
+    factory->contains_statement         = pub_contains_statement;
     factory->serialise                  = pub_serialise;
-    factory->find_statements        = pub_find_statements;
+    factory->find_statements            = pub_find_statements;
     factory->context_add_statement      = pub_context_add_statement;
-    factory->context_remove_statement = pub_context_remove_statement;
-    factory->context_remove_statements = pub_context_remove_statements;
-    factory->context_serialise              = pub_context_serialise;
+    factory->context_remove_statement   = pub_context_remove_statement;
+    factory->context_remove_statements  = pub_context_remove_statements;
+    factory->context_serialise          = pub_context_serialise;
     factory->find_statements_in_context = pub_context_find_statements;
-    factory->get_contexts                           = pub_get_contexts;
-    factory->get_feature                            = pub_get_feature;
-    factory->transaction_start              = pub_transaction_start;
-    factory->transaction_commit             = pub_transaction_commit;
-    factory->transaction_rollback           = pub_transaction_rollback;
+    factory->get_contexts               = pub_get_contexts;
+    factory->get_feature                = pub_get_feature;
+    factory->transaction_start          = pub_transaction_start;
+    factory->transaction_commit         = pub_transaction_commit;
+    factory->transaction_rollback       = pub_transaction_rollback;
 }
 
 
