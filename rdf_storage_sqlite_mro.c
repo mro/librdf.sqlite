@@ -206,6 +206,15 @@ static void profile(void *context, const char *sql, const sqlite3_uint64 ns)
 
 typedef int t_sqlite_rc;
 
+static t_sqlite_rc log_error(sqlite3 *db, const char *sql, const t_sqlite_rc rc)
+{
+    if( rc != SQLITE_OK ) {
+        const char *errmsg = sqlite3_errmsg(db);
+        librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "SQLite SQL error - %s (%d)\n%s", errmsg, rc, sql);
+    }
+    return rc;
+}
+
 
 static sqlite3_stmt *prep_stmt(sqlite3 *db, sqlite3_stmt **stmt_p, const char *zSql)
 {
@@ -219,7 +228,7 @@ static sqlite3_stmt *prep_stmt(sqlite3 *db, sqlite3_stmt **stmt_p, const char *z
     } else {
         const char *remainder = NULL;
         const int len_zSql = (int)strlen(zSql) + 1;
-        const t_sqlite_rc rc0 = sqlite3_prepare_v2(db, zSql, len_zSql, stmt_p, &remainder);
+        const t_sqlite_rc rc0 = log_error( db, zSql, sqlite3_prepare_v2(db, zSql, len_zSql, stmt_p, &remainder) );
         assert(rc0 == SQLITE_OK && "couldn't compile SQL statement");
         assert(*remainder == '\0' && "had remainder");
     }
@@ -239,7 +248,7 @@ static void finalize_stmt(sqlite3_stmt **pStmt)
 }
 
 
-static inline t_sqlite_rc bind_int(sqlite3_stmt *stmt, const char *name, const sqlite_int64 _id)
+static inline t_sqlite_rc bind_int(sqlite3_stmt *stmt, const char *name, const t_id _id)
 {
     assert(stmt && "stmt mandatory");
     assert(name && "name mandatory");
@@ -638,10 +647,7 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
         NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID
     };
     {
-        const char *find_parts_sql = // generated via ./tools/sql2c.sh find_parts.sql
-                                     "" "\n" \
-                                     "-- find triple parts (nodes)" "\n" \
-                                     "" "\n" \
+        const char *find_parts_sql = // generated via tools/sql2c.sh find_parts.sql
                                      "SELECT :part_s_u AS part, :t_uri AS node_type, id FROM so_uris WHERE (:s_type = :t_uri) AND uri = :s_uri" "\n" \
                                      "UNION" "\n" \
                                      "SELECT :part_s_b AS part, :t_blank AS node_type, id FROM so_blanks WHERE (:s_type = :t_blank) AND blank = :s_blank" "\n" \
@@ -693,7 +699,7 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
     }
     {
         // check if we have such a triple (spocs)
-        const char *lookup_triple_sql = "SELECT rowid FROM " TABLE_TRIPLES_NAME "\n"     \
+        const char *lookup_triple_sql = "SELECT rowid FROM " TABLE_TRIPLES_NAME "\n" \
                                         "WHERE s_uri=? AND s_blank=? AND p_uri=? AND o_uri=? AND o_blank=? AND o_lit=? AND c_uri=?";
         sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_spocs_get), lookup_triple_sql);
         for( int i = PART_C; i >= 0; i-- ) {
@@ -712,7 +718,7 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
     }
     {
         // create the triple
-        const char *insert_triple_sql = "INSERT INTO " TABLE_TRIPLES_NAME "\n"   \
+        const char *insert_triple_sql = "INSERT INTO " TABLE_TRIPLES_NAME "\n" \
                                         "(s_uri,s_blank,p_uri,o_uri,o_blank,o_lit,c_uri) VALUES" "\n" \
                                         "(      ?,          ?,      ?,      ?,          ?,      ?,      ?)";
         sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_spocs_set), insert_triple_sql);
@@ -853,7 +859,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                  "CREATE UNIQUE INDEX so_uris_index ON so_uris (uri);" "\n" \
                                  "CREATE TABLE so_blanks (" "\n" \
                                  "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                 "  ,blank TEXT NOT NULL" "\n" \
+                                 "  ,blank TEXT NULL" "\n" \
                                  ");" "\n" \
                                  "CREATE UNIQUE INDEX so_blanks_index ON so_blanks (blank);" "\n" \
                                  "CREATE TABLE p_uris (" "\n" \
@@ -880,7 +886,6 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                  "CREATE UNIQUE INDEX c_uris_index ON c_uris (uri);" "\n" \
                                  "INSERT INTO so_uris (id, uri) VALUES (0,'');" "\n" \
                                  "INSERT INTO so_blanks (id, blank) VALUES (0,'');" "\n" \
-                                 "INSERT INTO p_uris (id, uri) VALUES (0,'');" "\n" \
                                  "INSERT INTO c_uris (id, uri) VALUES (0,'');" "\n" \
                                  "INSERT INTO t_uris (id, uri) VALUES (0,'');" "\n" \
                                  "CREATE TABLE spocs (" "\n" \
@@ -958,13 +963,6 @@ static int pub_close(librdf_storage *storage)
         return RET_ERROR;
     }
     return RET_OK;
-}
-
-
-static librdf_iterator *pub_get_contexts(librdf_storage *storage)
-{
-    assert(0 && "not implemented yet.");
-    return NULL;
 }
 
 
@@ -1145,6 +1143,36 @@ static void pub_iter_finished(void *_ctx)
 #pragma mark Query
 
 
+static int pub_size(librdf_storage *storage)
+{
+    t_instance *db_ctx = get_instance(storage);
+    t_sqlite_rc begin = transaction_start(storage);
+
+    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(rowid) FROM " TABLE_TRIPLES_NAME);
+    const t_sqlite_rc rc = sqlite3_step(stmt);
+    if( rc == SQLITE_ROW ) {
+        const t_id ret = (t_id)sqlite3_column_int64(stmt, 0);
+        transaction_rollback(storage, begin);
+        return ret;
+    }
+    transaction_rollback(storage, begin);
+    return NULL_ID;
+}
+
+
+static librdf_iterator *pub_get_contexts(librdf_storage *storage)
+{
+    assert(0 && "not implemented yet.");
+    return NULL;
+}
+
+
+static int pub_contains_statement(librdf_storage *storage, librdf_statement *statement)
+{
+    return NULL != find_statement(storage, NULL, statement, BOOL_NO);
+}
+
+
 static librdf_stream *pub_context_find_statements(librdf_storage *storage, librdf_statement *statement, librdf_node *context_node)
 {
     t_sqlite_rc begin = transaction_start(storage);
@@ -1215,29 +1243,6 @@ static librdf_stream *pub_context_serialise(librdf_storage *storage, librdf_node
 static librdf_stream *pub_serialise(librdf_storage *storage)
 {
     return pub_context_serialise(storage, NULL);
-}
-
-
-static int pub_contains_statement(librdf_storage *storage, librdf_statement *statement)
-{
-    return NULL != find_statement(storage, NULL, statement, BOOL_NO);
-}
-
-
-static int pub_size(librdf_storage *storage)
-{
-    t_instance *db_ctx = get_instance(storage);
-    t_sqlite_rc begin = transaction_start(storage);
-
-    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(rowid) FROM " TABLE_TRIPLES_NAME);
-    const t_sqlite_rc rc = sqlite3_step(stmt);
-    if( rc == SQLITE_ROW ) {
-        const t_id ret = (t_id)sqlite3_column_int64(stmt, 0);
-        transaction_rollback(storage, begin);
-        return ret;
-    }
-    transaction_rollback(storage, begin);
-    return NULL_ID;
 }
 
 

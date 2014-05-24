@@ -29,7 +29,7 @@ CREATE UNIQUE INDEX so_uris_index ON so_uris (uri);
 
 CREATE TABLE so_blanks (
   id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1
-  ,blank TEXT NOT NULL
+  ,blank TEXT NULL
 );
 CREATE UNIQUE INDEX so_blanks_index ON so_blanks (blank);
 
