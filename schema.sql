@@ -22,58 +22,58 @@
 --
 
 CREATE TABLE so_uris (
-  id INTEGER PRIMARY KEY
+  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1
   ,uri TEXT NOT NULL
 );
 CREATE UNIQUE INDEX so_uris_index ON so_uris (uri);
 
 CREATE TABLE so_blanks (
-  id INTEGER PRIMARY KEY
+  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1
   ,blank TEXT NOT NULL
 );
 CREATE UNIQUE INDEX so_blanks_index ON so_blanks (blank);
 
 CREATE TABLE p_uris (
-  id INTEGER PRIMARY KEY
+  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1
   ,uri TEXT NOT NULL
 );
 CREATE UNIQUE INDEX p_uris_index ON p_uris (uri);
 
+CREATE TABLE t_uris (
+  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1
+  ,uri TEXT NOT NULL
+);
+CREATE UNIQUE INDEX t_uris_index ON t_uris (uri);
+
 CREATE TABLE o_literals (
-  id INTEGER PRIMARY KEY
-  ,datatype INTEGER NOT NULL
+  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1
+  ,datatype INTEGER NOT NULL REFERENCES t_uris (id) ON DELETE NO ACTION
   ,text TEXT NOT NULL
   ,language TEXT NOT NULL
 );
 CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype);
 
-CREATE TABLE t_uris (
-  id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL
-);
-CREATE UNIQUE INDEX t_uris_index ON t_uris (uri);
-
 CREATE TABLE c_uris (
-  id INTEGER PRIMARY KEY
+  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1
   ,uri TEXT NOT NULL
 );
 CREATE UNIQUE INDEX c_uris_index ON c_uris (uri);
 
--- ensure dummies for -1 so as we can relate NOT NULL in spocs
-INSERT INTO so_uris (id, uri) VALUES (-1,'');
-INSERT INTO so_blanks (id, blank) VALUES (-1,'');
-INSERT INTO p_uris (id, uri) VALUES (-1,'');
-INSERT INTO c_uris (id, uri) VALUES (-1,'');
-INSERT INTO t_uris (id, uri) VALUES (-1,'');
+-- ensure dummies for 0 so as we can relate NOT NULL in spocs
+INSERT INTO so_uris (id, uri) VALUES (0,'');
+INSERT INTO so_blanks (id, blank) VALUES (0,'');
+-- INSERT INTO p_uris (id, uri) VALUES (0,'');
+INSERT INTO c_uris (id, uri) VALUES (0,'');
+INSERT INTO t_uris (id, uri) VALUES (0,'');
 
 CREATE TABLE spocs (
-  s_uri INTEGER NOT NULL
-  ,s_blank INTEGER NOT NULL
-  ,p_uri INTEGER NOT NULL
-  ,o_uri INTEGER NOT NULL
-  ,o_blank INTEGER NOT NULL
-  ,o_lit INTEGER NOT NULL
-  ,c_uri INTEGER NOT NULL
+  s_uri INTEGER NOT NULL    REFERENCES so_uris (id) ON DELETE NO ACTION
+  ,s_blank INTEGER NOT NULL REFERENCES so_blanks (id) ON DELETE NO ACTION
+  ,p_uri INTEGER NOT NULL   REFERENCES p_uris (id) ON DELETE NO ACTION
+  ,o_uri INTEGER NOT NULL   REFERENCES so_uris (id) ON DELETE NO ACTION
+  ,o_blank INTEGER NOT NULL REFERENCES so_blanks (id) ON DELETE NO ACTION
+  ,o_lit INTEGER NOT NULL   REFERENCES t_literals (id) ON DELETE NO ACTION
+  ,c_uri INTEGER NOT NULL   REFERENCES c_uris (id) ON DELETE NO ACTION
 );
 CREATE UNIQUE INDEX spocs_index ON spocs (s_uri,s_blank,p_uri,o_uri,o_blank,o_lit,c_uri);
 -- CREATE INDEX spocs_index_so ON spocs (s_uri,o_uri);
@@ -108,4 +108,4 @@ LEFT OUTER JOIN t_uris     AS o_lit_uris ON o_literals.datatype   = o_lit_uris.i
 INNER JOIN c_uris     AS c_uris     ON spocs.c_uri      = c_uris.id
 ;
 
-PRAGMA user_version=1;
+PRAGMA user_version=2;

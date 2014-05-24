@@ -21,7 +21,7 @@
 -- THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -- 
 
--- result columns must match as used in pub_stream_get_statement
+-- result columns must match as used in pub_iter_get_statement
 SELECT
   s_uri
   ,s_blank
