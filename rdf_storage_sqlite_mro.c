@@ -30,13 +30,13 @@
 const char *LIBRDF_STORAGE_SQLITE_MRO = "http://purl.mro.name/rdf/sqlite/mro";
 
 #include <stdlib.h>
-#include <stdio.h>
+// #include <stdio.h>
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
-#include <sqlite3.h>
 #include <redland.h>
 #include <rdf_storage.h>
+#include <sqlite3.h>
 
 #pragma mark Basic Types & Constants
 
@@ -49,7 +49,7 @@ typedef uint32_t id_t;
 static const id_t NULL_ID = 0;
 static inline boolean_t isNULL_ID(const id_t x)
 {
-    return x <= 0;
+    return x == 0;
 }
 
 
@@ -75,6 +75,7 @@ typedef char *str_lang_t;
 #define isNULL_BLANK(x) ( (x) == NULL || (x)[0] == '\0' )
 
 
+/** index into synchronous_flags */
 typedef enum {
     SYNC_UNKONWN = -1,
     SYNC_OFF = 0,
@@ -97,13 +98,14 @@ typedef struct
 {
     sqlite3 *db;
 
-    boolean_t is_new;
     const char *name;
     size_t name_len;
-    syncronous_flag_t synchronous; /* -1 (not set), 0+ index into sqlite_synchronous_flags */
+    boolean_t is_new;
+    syncronous_flag_t synchronous;
+    boolean_t in_transaction;
+
     boolean_t in_stream;
     legacy_query_t *in_stream_queries;
-    boolean_t in_transaction;
 
     // compiled statements, lazy init
     sqlite3_stmt *stmt_txn_start;
@@ -153,13 +155,15 @@ static inline void free_hash(librdf_hash *hash)
 }
 
 
-static inline librdf_node_type get_type(librdf_node *node)
+static inline librdf_node_type node_type(librdf_node *node)
 {
     return node == NULL ? LIBRDF_NODE_TYPE_UNKNOWN : librdf_node_get_type(node);
 }
 
 
-static inline librdf_uri *get_uri(librdf_node *node)
+/** SHARED pointer - copy in case but don't free.
+ */
+static inline librdf_uri *node_uri(librdf_node *node)
 {
     return node == NULL ? NULL : librdf_node_get_uri(node);
 }
@@ -460,7 +464,7 @@ static inline id_t create_uri_so(instance_t *db_ctx, librdf_node *node)
 {
     if( !node || !librdf_node_is_resource(node) )
         return NULL_ID;
-    return create_uri( db_ctx, get_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_so_set), "INSERT INTO " TABLE_URIS_SO_NAME " (uri) VALUES (?)") );
+    return create_uri( db_ctx, node_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_so_set), "INSERT INTO " TABLE_URIS_SO_NAME " (uri) VALUES (?)") );
 }
 
 
@@ -468,7 +472,7 @@ static inline id_t create_uri_p(instance_t *db_ctx, librdf_node *node)
 {
     if( !node || !librdf_node_is_resource(node) )
         return NULL_ID;
-    return create_uri( db_ctx, get_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_p_set), "INSERT INTO " TABLE_URIS_P_NAME " (uri) VALUES (?)") );
+    return create_uri( db_ctx, node_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_p_set), "INSERT INTO " TABLE_URIS_P_NAME " (uri) VALUES (?)") );
 }
 
 
@@ -476,7 +480,7 @@ static inline id_t create_uri_c(instance_t *db_ctx, librdf_node *node)
 {
     if( !node || !librdf_node_is_resource(node) )
         return NULL_ID;
-    return create_uri( db_ctx, get_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_c_set), "INSERT INTO " TABLE_URIS_C_NAME " (uri) VALUES (?)") );
+    return create_uri( db_ctx, node_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_c_set), "INSERT INTO " TABLE_URIS_C_NAME " (uri) VALUES (?)") );
 }
 
 
@@ -577,26 +581,26 @@ static sqlite_rc_t bind_stmt(sqlite3_stmt *stmt, librdf_node *context_node, libr
     rc = bind_int(stmt, ":part_triple", i = PART_TRIPLE);
 
     librdf_node *s = librdf_statement_get_subject(statement);
-    t = get_type(s);
+    t = node_type(s);
     rc = bind_int(stmt, ":s_type", t);
     if( t == LIBRDF_NODE_TYPE_UNKNOWN ) {
         rc = bind_null(stmt, ":s_uri");
         rc = bind_null(stmt, ":s_blank");
     } else {
-        rc = bind_uri( stmt, ":s_uri", get_uri(s) );
+        rc = bind_uri( stmt, ":s_uri", node_uri(s) );
         rc = bind_text(stmt, ":s_blank", librdf_node_get_counted_blank_identifier(s, &len), len);
     }
 
     librdf_node *p = librdf_statement_get_predicate(statement);
-    t = get_type(p);
+    t = node_type(p);
     rc = bind_int(stmt, ":p_type", t);
     if( t == LIBRDF_NODE_TYPE_UNKNOWN )
         rc = bind_null(stmt, ":p_uri");
     else
-        rc = bind_uri( stmt, ":p_uri", get_uri(p) );
+        rc = bind_uri( stmt, ":p_uri", node_uri(p) );
 
     librdf_node *o = librdf_statement_get_object(statement);
-    t = get_type(o);
+    t = node_type(o);
     rc = bind_int(stmt, ":o_type", t);
     if( t == LIBRDF_NODE_TYPE_UNKNOWN ) {
         rc = bind_null(stmt, ":o_uri");
@@ -605,7 +609,7 @@ static sqlite_rc_t bind_stmt(sqlite3_stmt *stmt, librdf_node *context_node, libr
         rc = bind_null(stmt, ":o_datatype");
         rc = bind_null(stmt, ":o_language");
     } else {
-        rc = bind_uri( stmt, ":o_uri", get_uri(o) );
+        rc = bind_uri( stmt, ":o_uri", node_uri(o) );
         rc = bind_text(stmt, ":o_blank", librdf_node_get_counted_blank_identifier(o, &len), len);
         rc = bind_text(stmt, ":o_text", librdf_node_get_literal_value_as_counted_string(o, &len), len);
         rc = bind_uri( stmt, ":o_datatype", librdf_node_get_literal_value_datatype_uri(o) );
@@ -614,7 +618,7 @@ static sqlite_rc_t bind_stmt(sqlite3_stmt *stmt, librdf_node *context_node, libr
     }
 
     rc = bind_int(stmt, ":c_wild", context_node == NULL);
-    rc = bind_uri( stmt, ":c_uri", get_uri(context_node) );
+    rc = bind_uri( stmt, ":c_uri", node_uri(context_node) );
 
     return SQLITE_OK;
 }
@@ -787,7 +791,7 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
     strncpy(name_copy, name, db_ctx->name_len + 1);
     db_ctx->name = name_copy;
 
-    if( librdf_hash_get_as_boolean(options, "new") != BOOL_NO )
+    if( BOOL_NO != librdf_hash_get_as_boolean(options, "new") )
         db_ctx->is_new = BOOL_YES;  /* default is NOT NEW */
 
     /* Redland default is "PRAGMA synchronous normal" */
@@ -795,7 +799,7 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
 
     char *synchronous = synchronous = librdf_hash_get(options, "synchronous");
     if( synchronous ) {
-        for( syncronous_flag_t i = 0; synchronous_flags[i]; i++ ) {
+        for( int i = 0; synchronous_flags[i]; i++ ) {
             if( !strcmp(synchronous, synchronous_flags[i]) ) {
                 db_ctx->synchronous = i;
                 break;
@@ -820,7 +824,36 @@ static void pub_terminate(librdf_storage *storage)
 }
 
 
-static int pub_close(librdf_storage *storage);
+static int pub_close(librdf_storage *storage)
+{
+    instance_t *db_ctx = get_instance(storage);
+
+    finalize_stmt( &(db_ctx->stmt_txn_start) );
+    finalize_stmt( &(db_ctx->stmt_txn_commit) );
+    finalize_stmt( &(db_ctx->stmt_txn_rollback) );
+    finalize_stmt( &(db_ctx->stmt_uri_so_set) );
+    finalize_stmt( &(db_ctx->stmt_uri_p_set) );
+    finalize_stmt( &(db_ctx->stmt_uri_t_set) );
+    finalize_stmt( &(db_ctx->stmt_uri_c_set) );
+    finalize_stmt( &(db_ctx->stmt_literal_set) );
+    finalize_stmt( &(db_ctx->stmt_blank_so_set) );
+    finalize_stmt( &(db_ctx->stmt_parts_get) );
+    finalize_stmt( &(db_ctx->stmt_spocs_get) );
+    finalize_stmt( &(db_ctx->stmt_spocs_set) );
+
+    finalize_stmt( &(db_ctx->stmt_size) );
+    finalize_stmt( &(db_ctx->stmt_find) );
+
+    const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
+    if( rc != SQLITE_OK ) {
+        char *errmsg = (char *)sqlite3_errmsg(db_ctx->db);
+        librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL,
+                   "SQLite database %s close failed - %s", db_ctx->name, errmsg);
+        pub_close(storage);
+        return RET_ERROR;
+    }
+    return RET_OK;
+}
 
 
 static int pub_open(librdf_storage *storage, librdf_model *model)
@@ -861,7 +894,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         }
     }
 
-    // create tables and indices if required.
+    // create tables and indices if DB is new.
     if( db_ctx->is_new ) {
         const sqlite_rc_t begin = transaction_start(storage);
 
@@ -943,38 +976,6 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         }
 
         transaction_commit(storage, begin);
-    }
-    return RET_OK;
-}
-
-
-static int pub_close(librdf_storage *storage)
-{
-    instance_t *db_ctx = get_instance(storage);
-
-    finalize_stmt( &(db_ctx->stmt_txn_start) );
-    finalize_stmt( &(db_ctx->stmt_txn_commit) );
-    finalize_stmt( &(db_ctx->stmt_txn_rollback) );
-    finalize_stmt( &(db_ctx->stmt_uri_so_set) );
-    finalize_stmt( &(db_ctx->stmt_uri_p_set) );
-    finalize_stmt( &(db_ctx->stmt_uri_t_set) );
-    finalize_stmt( &(db_ctx->stmt_uri_c_set) );
-    finalize_stmt( &(db_ctx->stmt_literal_set) );
-    finalize_stmt( &(db_ctx->stmt_blank_so_set) );
-    finalize_stmt( &(db_ctx->stmt_parts_get) );
-    finalize_stmt( &(db_ctx->stmt_spocs_get) );
-    finalize_stmt( &(db_ctx->stmt_spocs_set) );
-
-    finalize_stmt( &(db_ctx->stmt_size) );
-    finalize_stmt( &(db_ctx->stmt_find) );
-
-    const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
-    if( rc != SQLITE_OK ) {
-        char *errmsg = (char *)sqlite3_errmsg(db_ctx->db);
-        librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL,
-                   "SQLite database %s close failed - %s", db_ctx->name, errmsg);
-        pub_close(storage);
-        return RET_ERROR;
     }
     return RET_OK;
 }
@@ -1158,7 +1159,7 @@ static void pub_iter_finished(void *_ctx)
 }
 
 
-#pragma mark Query
+#pragma mark Query & Iterate
 
 
 static int pub_size(librdf_storage *storage)
@@ -1314,10 +1315,10 @@ static int pub_context_remove_statements(librdf_storage *storage, librdf_node *c
 }
 
 
-#pragma mark register storage factory
+#pragma mark Register Storage Factory
 
 
-static void librdf_storage_sqlite_register_factory(librdf_storage_factory *factory)
+static void register_factory(librdf_storage_factory *factory)
 {
     assert( !strcmp(factory->name, LIBRDF_STORAGE_SQLITE_MRO) );
 
@@ -1348,5 +1349,5 @@ static void librdf_storage_sqlite_register_factory(librdf_storage_factory *facto
 
 void librdf_init_storage_sqlite_mro(librdf_world *world)
 {
-    librdf_storage_register_factory(world, LIBRDF_STORAGE_SQLITE_MRO, "SQLite", &librdf_storage_sqlite_register_factory);
+    librdf_storage_register_factory(world, LIBRDF_STORAGE_SQLITE_MRO, "SQLite", &register_factory);
 }

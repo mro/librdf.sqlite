@@ -10,6 +10,10 @@ Considered alpha, *don't use in production*.
 
     #include "rdf_storage_sqlite_mro.h"
     ....
+    librdf_world *world = ...;
+    ....
+    librdf_init_storage_sqlite_mro(world);  // register storage factory
+    ....
     const char* options = "new='yes', contexts='no'";
     librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
 
