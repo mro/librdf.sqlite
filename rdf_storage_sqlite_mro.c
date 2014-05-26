@@ -43,11 +43,11 @@ const char *LIBRDF_STORAGE_SQLITE_MRO = "http://purl.mro.name/rdf/sqlite/mro";
 typedef enum {
     BOOL_NO = 0,
     BOOL_YES = 1
-} t_boolean;
+} boolean_t;
 
-typedef uint32_t t_id;
-static const t_id NULL_ID = 0;
-static inline t_boolean isNULL_ID(const t_id x)
+typedef uint32_t id_t;
+static const id_t NULL_ID = 0;
+static inline boolean_t isNULL_ID(const id_t x)
 {
     return x <= 0;
 }
@@ -66,31 +66,35 @@ static inline t_boolean isNULL_ID(const t_id x)
 #define isNULL_BLANK(x) ( (x) == NULL || (x)[0] == '\0' )
 
 
-static const char *const sqlite_synchronous_flags[4] = {
+typedef enum {
+    SYNC_UNKONWN = -1,
+    SYNC_OFF = 0,
+    SYNC_NORMAL = 1,
+    SYNC_FULL = 2
+} syncronous_flag_t;
+static const char *const synchronous_flags[4] = {
     "off", "normal", "full", NULL
 };
-#define SYNC_OFF 0
-#define SYNC_NORMAL 1
 
 
-typedef struct t_legacy_query t_legacy_query;
-struct t_legacy_query
+typedef struct legacy_query_t legacy_query_t;
+struct legacy_query_t
 {
     unsigned char *query;
-    t_legacy_query *next;
+    legacy_query_t *next;
 };
 
 typedef struct
 {
     sqlite3 *db;
 
-    t_boolean is_new;
+    boolean_t is_new;
     const char *name;
     size_t name_len;
-    int synchronous; /* -1 (not set), 0+ index into sqlite_synchronous_flags */
-    t_boolean in_stream;
-    t_legacy_query *in_stream_queries;
-    t_boolean in_transaction;
+    syncronous_flag_t synchronous; /* -1 (not set), 0+ index into sqlite_synchronous_flags */
+    boolean_t in_stream;
+    legacy_query_t *in_stream_queries;
+    boolean_t in_transaction;
 
     // compiled statements, lazy init
     sqlite3_stmt *stmt_txn_start;
@@ -109,7 +113,7 @@ typedef struct
     sqlite3_stmt *stmt_size;
     sqlite3_stmt *stmt_find;
 }
-t_instance;
+instance_t;
 
 
 #pragma mark librdf convenience
@@ -117,13 +121,13 @@ t_instance;
 
 #define LIBRDF_MALLOC(type, size) (type)malloc(size)
 #define LIBRDF_CALLOC(type, size, count) (type)calloc(count, size)
-#define LIBRDF_FREE(type, ptr) free(ptr)
+#define LIBRDF_FREE(type, ptr) free( (type)ptr )
 // #define LIBRDF_BAD_CAST(t, v) (t)(v)
 
 
-static inline t_instance *get_instance(librdf_storage *storage)
+static inline instance_t *get_instance(librdf_storage *storage)
 {
-    return (t_instance *)librdf_storage_get_instance(storage);
+    return (instance_t *)librdf_storage_get_instance(storage);
 }
 
 
@@ -204,9 +208,10 @@ static void profile(void *context, const char *sql, const sqlite3_uint64 ns)
 #pragma mark Sqlite Convenience
 
 
-typedef int t_sqlite_rc;
+/** Sqlite Result Code, e.g. SQLITE_OK */
+typedef int sqlite_rc_t;
 
-static t_sqlite_rc log_error(sqlite3 *db, const char *sql, const t_sqlite_rc rc)
+static sqlite_rc_t log_error(sqlite3 *db, const char *sql, const sqlite_rc_t rc)
 {
     if( rc != SQLITE_OK ) {
         const char *errmsg = sqlite3_errmsg(db);
@@ -223,12 +228,12 @@ static sqlite3_stmt *prep_stmt(sqlite3 *db, sqlite3_stmt **stmt_p, const char *z
     assert(zSql && "SQL is NULL");
     if( *stmt_p ) {
         assert(0 == strcmp(sqlite3_sql(*stmt_p), zSql) && "ouch");
-        const t_sqlite_rc rc0 = sqlite3_reset(*stmt_p);
+        const sqlite_rc_t rc0 = sqlite3_reset(*stmt_p);
         assert(rc0 == SQLITE_OK && "couldn't reset SQL statement");
     } else {
         const char *remainder = NULL;
         const int len_zSql = (int)strlen(zSql) + 1;
-        const t_sqlite_rc rc0 = log_error( db, zSql, sqlite3_prepare_v2(db, zSql, len_zSql, stmt_p, &remainder) );
+        const sqlite_rc_t rc0 = log_error( db, zSql, sqlite3_prepare_v2(db, zSql, len_zSql, stmt_p, &remainder) );
         assert(rc0 == SQLITE_OK && "couldn't compile SQL statement");
         assert(*remainder == '\0' && "had remainder");
     }
@@ -242,13 +247,13 @@ static void finalize_stmt(sqlite3_stmt **pStmt)
     if( *pStmt == NULL )
         return;
     sqlite3_reset(*pStmt);
-    const t_sqlite_rc rc = sqlite3_finalize(*pStmt);
+    const sqlite_rc_t rc = sqlite3_finalize(*pStmt);
     assert(rc == SQLITE_OK && "ouch");
     *pStmt = NULL;
 }
 
 
-static inline t_sqlite_rc bind_int(sqlite3_stmt *stmt, const char *name, const t_id _id)
+static inline sqlite_rc_t bind_int(sqlite3_stmt *stmt, const char *name, const id_t _id)
 {
     assert(stmt && "stmt mandatory");
     assert(name && "name mandatory");
@@ -257,7 +262,7 @@ static inline t_sqlite_rc bind_int(sqlite3_stmt *stmt, const char *name, const t
 }
 
 
-static inline t_sqlite_rc bind_text(sqlite3_stmt *stmt, const char *name, const unsigned char *text, const size_t text_len)
+static inline sqlite_rc_t bind_text(sqlite3_stmt *stmt, const char *name, const unsigned char *text, const size_t text_len)
 {
     assert(stmt && "stmt mandatory");
     assert(name && "name mandatory");
@@ -266,13 +271,13 @@ static inline t_sqlite_rc bind_text(sqlite3_stmt *stmt, const char *name, const 
 }
 
 
-static inline t_sqlite_rc bind_null(sqlite3_stmt *stmt, const char *name)
+static inline sqlite_rc_t bind_null(sqlite3_stmt *stmt, const char *name)
 {
     return bind_text(stmt, name, NULL, 0);
 }
 
 
-static inline t_sqlite_rc bind_uri(sqlite3_stmt *stmt, const char *name, librdf_uri *uri)
+static inline sqlite_rc_t bind_uri(sqlite3_stmt *stmt, const char *name, librdf_uri *uri)
 {
     size_t len = 0;
     return bind_text(stmt, name, uri == NULL ? NULL_URI : librdf_uri_as_counted_string(uri, &len), len);
@@ -300,53 +305,53 @@ static inline const char *column_language(sqlite3_stmt *stmt, const int iCol)
 }
 
 
-static t_id insert(sqlite3 *db, sqlite3_stmt *stmt)
+static id_t insert(sqlite3 *db, sqlite3_stmt *stmt)
 {
-    const t_sqlite_rc rc3 = sqlite3_step(stmt);
+    const sqlite_rc_t rc3 = sqlite3_step(stmt);
     if( rc3 == SQLITE_DONE ) {
         const sqlite3_int64 r = sqlite3_last_insert_rowid(db);
-        const t_sqlite_rc rc2 = sqlite3_reset(stmt);
+        const sqlite_rc_t rc2 = sqlite3_reset(stmt);
         assert(rc2 == SQLITE_OK && "ouch");
-        return (t_id)r;
+        return (id_t)r;
     }
     return -rc3;
 }
 
 
-static t_sqlite_rc transaction_start(librdf_storage *storage)
+static sqlite_rc_t transaction_start(librdf_storage *storage)
 {
-    t_instance *db_ctx = get_instance(storage);
+    instance_t *db_ctx = get_instance(storage);
     if( db_ctx->in_transaction )
         return SQLITE_MISUSE;
-    const t_sqlite_rc rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_start), "BEGIN IMMEDIATE TRANSACTION;") );
+    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_start), "BEGIN IMMEDIATE TRANSACTION;") );
     db_ctx->in_transaction = rc == SQLITE_DONE;
     assert(db_ctx->in_transaction != BOOL_NO && "ouch");
     return rc == SQLITE_DONE ? SQLITE_OK : rc;
 }
 
 
-static t_sqlite_rc transaction_commit(librdf_storage *storage, const t_sqlite_rc begin)
+static sqlite_rc_t transaction_commit(librdf_storage *storage, const sqlite_rc_t begin)
 {
     if( begin != SQLITE_OK )
         return SQLITE_OK;
-    t_instance *db_ctx = get_instance(storage);
+    instance_t *db_ctx = get_instance(storage);
     if( db_ctx->in_transaction == BOOL_NO )
         return SQLITE_MISUSE;
-    const t_sqlite_rc rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_commit), "COMMIT  TRANSACTION;") );
+    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_commit), "COMMIT  TRANSACTION;") );
     db_ctx->in_transaction = !(rc == SQLITE_DONE);
     assert(db_ctx->in_transaction == BOOL_NO && "ouch");
     return rc == SQLITE_DONE ? SQLITE_OK : rc;
 }
 
 
-static t_sqlite_rc transaction_rollback(librdf_storage *storage, const t_sqlite_rc begin)
+static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc_t begin)
 {
     if( begin != SQLITE_OK )
         return SQLITE_OK;
-    t_instance *db_ctx = get_instance(storage);
+    instance_t *db_ctx = get_instance(storage);
     if( db_ctx->in_transaction == BOOL_NO )
         return SQLITE_MISUSE;
-    const t_sqlite_rc rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_rollback), "ROLLBACK TRANSACTION;") );
+    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_rollback), "ROLLBACK TRANSACTION;") );
     db_ctx->in_transaction = !(rc == SQLITE_DONE);
     assert(db_ctx->in_transaction == BOOL_NO && "ouch");
     return rc == SQLITE_DONE ? SQLITE_OK : rc;
@@ -359,9 +364,9 @@ static t_sqlite_rc transaction_rollback(librdf_storage *storage, const t_sqlite_
 #pragma mark Legacy
 
 
-static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *request, sqlite3_callback callback, void *arg, t_boolean fail_ok)
+static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *request, sqlite3_callback callback, void *arg, boolean_t fail_ok)
 {
-    t_instance *db_ctx = get_instance(storage);
+    instance_t *db_ctx = get_instance(storage);
 
     /* sqlite crashes if passed in a NULL sql string */
     if( !request )
@@ -372,7 +377,7 @@ static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *reque
 #endif
 
     char *errmsg = NULL;
-    t_sqlite_rc status = sqlite3_exec(db_ctx->db, (const char *)request, callback, arg, &errmsg);
+    sqlite_rc_t status = sqlite3_exec(db_ctx->db, (const char *)request, callback, arg, &errmsg);
     if( fail_ok )
         status = SQLITE_OK;
 
@@ -382,14 +387,14 @@ static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *reque
             if( errmsg )
                 sqlite3_free(errmsg);
 
-            t_legacy_query *query = LIBRDF_CALLOC( t_legacy_query *, 1, sizeof(*query) );
+            legacy_query_t *query = LIBRDF_CALLOC( legacy_query_t *, 1, sizeof(*query) );
             if( !query )
                 return RET_ERROR;
 
             const size_t query_buf = strlen( (char *)request ) + 1;
             query->query = LIBRDF_MALLOC(unsigned char *, query_buf);
             if( !query->query ) {
-                LIBRDF_FREE(librdf_storage_sqlite_query, query);
+                LIBRDF_FREE(legacy_query_t *, query);
                 return RET_ERROR;
             }
 
@@ -398,7 +403,7 @@ static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *reque
             if( !db_ctx->in_stream_queries )
                 db_ctx->in_stream_queries = query;
             else {
-                t_legacy_query *q = db_ctx->in_stream_queries;
+                legacy_query_t *q = db_ctx->in_stream_queries;
                 while( q->next )
                     q = q->next;
                 q->next = query;
@@ -429,20 +434,20 @@ static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *reque
 #define TABLE_TRIPLES_NAME "spocs"
 
 
-static t_id create_uri(t_instance *db_ctx, librdf_uri *uri, sqlite3_stmt *stmt)
+static id_t create_uri(instance_t *db_ctx, librdf_uri *uri, sqlite3_stmt *stmt)
 {
     if( !uri )
         return NULL_ID;
     assert(stmt && "Statement is null");
     size_t len = 0;
     const char *txt = (const char *)librdf_uri_as_counted_string(uri, &len);
-    const t_sqlite_rc rc0 = sqlite3_bind_text(stmt, 1, txt, (int)len, SQLITE_STATIC);
+    const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, txt, (int)len, SQLITE_STATIC);
     assert(rc0 == SQLITE_OK && "bind fail");
     return insert(db_ctx->db, stmt);
 }
 
 
-static inline t_id create_uri_so(t_instance *db_ctx, librdf_node *node)
+static inline id_t create_uri_so(instance_t *db_ctx, librdf_node *node)
 {
     if( !node || !librdf_node_is_resource(node) )
         return NULL_ID;
@@ -450,7 +455,7 @@ static inline t_id create_uri_so(t_instance *db_ctx, librdf_node *node)
 }
 
 
-static inline t_id create_uri_p(t_instance *db_ctx, librdf_node *node)
+static inline id_t create_uri_p(instance_t *db_ctx, librdf_node *node)
 {
     if( !node || !librdf_node_is_resource(node) )
         return NULL_ID;
@@ -458,7 +463,7 @@ static inline t_id create_uri_p(t_instance *db_ctx, librdf_node *node)
 }
 
 
-static inline t_id create_uri_c(t_instance *db_ctx, librdf_node *node)
+static inline id_t create_uri_c(instance_t *db_ctx, librdf_node *node)
 {
     if( !node || !librdf_node_is_resource(node) )
         return NULL_ID;
@@ -466,7 +471,7 @@ static inline t_id create_uri_c(t_instance *db_ctx, librdf_node *node)
 }
 
 
-static inline t_id create_uri_t(t_instance *db_ctx, librdf_node *node)
+static inline id_t create_uri_t(instance_t *db_ctx, librdf_node *node)
 {
     if( !node || !librdf_node_is_literal(node) )
         return NULL_ID;
@@ -477,7 +482,7 @@ static inline t_id create_uri_t(t_instance *db_ctx, librdf_node *node)
 }
 
 
-static t_id create_blank(t_instance *db_ctx, librdf_node *node, sqlite3_stmt *stmt)
+static id_t create_blank(instance_t *db_ctx, librdf_node *node, sqlite3_stmt *stmt)
 {
     if( !node || !librdf_node_is_blank(node) )
         return NULL_ID;
@@ -485,19 +490,19 @@ static t_id create_blank(t_instance *db_ctx, librdf_node *node, sqlite3_stmt *st
     unsigned char *val = librdf_node_get_counted_blank_identifier(node, &len);
     if( val == NULL )
         return NULL_ID;
-    const t_sqlite_rc rc0 = sqlite3_bind_text(stmt, 1, (const char *)val, (int)len, SQLITE_STATIC);
+    const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, (const char *)val, (int)len, SQLITE_STATIC);
     assert(rc0 == SQLITE_OK && "bind fail");
     return insert(db_ctx->db, stmt);
 }
 
 
-static inline t_id create_blank_so(t_instance *db_ctx, librdf_node *node)
+static inline id_t create_blank_so(instance_t *db_ctx, librdf_node *node)
 {
     return create_blank( db_ctx, node, prep_stmt(db_ctx->db, &(db_ctx->stmt_blank_so_set), "INSERT INTO " TABLE_BLANKS_SO_NAME " (blank) VALUES (?)") );
 }
 
 
-static t_id create_literal(t_instance *db_ctx, librdf_node *node, const t_id datatype_id, sqlite3_stmt *stmt)
+static id_t create_literal(instance_t *db_ctx, librdf_node *node, const id_t datatype_id, sqlite3_stmt *stmt)
 {
     if( !node || !librdf_node_is_literal(node) )
         return NULL_ID;
@@ -507,17 +512,17 @@ static t_id create_literal(t_instance *db_ctx, librdf_node *node, const t_id dat
     char *language = librdf_node_get_literal_value_language(node);
     if( language == NULL )
         language = NULL_LANG;
-    const t_sqlite_rc rc0 = sqlite3_bind_text(stmt, 1, (const char *)txt, (int)len, SQLITE_STATIC);
+    const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, (const char *)txt, (int)len, SQLITE_STATIC);
     assert(rc0 == SQLITE_OK && "bind fail");
-    const t_sqlite_rc rc1 = sqlite3_bind_int64(stmt, 2, datatype_id);
+    const sqlite_rc_t rc1 = sqlite3_bind_int64(stmt, 2, datatype_id);
     assert(rc1 == SQLITE_OK && "bind fail");
-    const t_sqlite_rc rc2 = sqlite3_bind_text(stmt, 3, language, -1, SQLITE_STATIC);
+    const sqlite_rc_t rc2 = sqlite3_bind_text(stmt, 3, language, -1, SQLITE_STATIC);
     assert(rc2 == SQLITE_OK && "bind fail");
     return insert(db_ctx->db, stmt);
 }
 
 
-static inline t_id create_literal_o(t_instance *db_ctx, librdf_node *node, const t_id datatype_id)
+static inline id_t create_literal_o(instance_t *db_ctx, librdf_node *node, const id_t datatype_id)
 {
     return create_literal( db_ctx, node, datatype_id, prep_stmt(db_ctx->db, &(db_ctx->stmt_literal_set), "INSERT INTO " TABLE_LITERALS_NAME " (text,datatype,language) VALUES (?,?,?)") );
 }
@@ -536,15 +541,15 @@ typedef enum {
     PART_DATATYPE, // indirect triple part - literal-datatype.
     PART_TRIPLE, // not strictly a triple part, reserved if I manage to return parts and triple in one go (either is fine)
 }
-t_part;
+part_t;
 
 
-static t_sqlite_rc bind_stmt(sqlite3_stmt *stmt, librdf_node *context_node, librdf_statement *statement)
+static sqlite_rc_t bind_stmt(sqlite3_stmt *stmt, librdf_node *context_node, librdf_statement *statement)
 {
-    t_sqlite_rc rc = SQLITE_OK;
+    sqlite_rc_t rc = SQLITE_OK;
     size_t len = 0;
     librdf_node_type t = LIBRDF_NODE_TYPE_UNKNOWN;
-    t_part i = PART_S_U;
+    part_t i = PART_S_U;
     // add some constants for reporting results back
     // node type markers
     rc = bind_int(stmt, ":t_uri", t = LIBRDF_NODE_TYPE_RESOURCE);
@@ -606,7 +611,7 @@ static t_sqlite_rc bind_stmt(sqlite3_stmt *stmt, librdf_node *context_node, libr
 }
 
 
-static t_id create_part(t_instance *inst, librdf_node *node, const t_part part, t_id ids[])
+static id_t create_part(instance_t *inst, librdf_node *node, const part_t part, id_t ids[])
 {
     if( !node || !isNULL_ID(ids[part]) )
         return ids[part];
@@ -635,15 +640,15 @@ static t_id create_part(t_instance *inst, librdf_node *node, const t_part part, 
 }
 
 
-static librdf_statement *find_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement, t_boolean create)
+static librdf_statement *find_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement, boolean_t create)
 {
-    const t_sqlite_rc begin = transaction_start(storage);
-    t_instance *db_ctx = get_instance(storage);
+    const sqlite_rc_t begin = transaction_start(storage);
+    instance_t *db_ctx = get_instance(storage);
 
-    // const t_index size = pub_size(storage);
+    // const id_t size = pub_size(storage);
 
     // find already existing parts
-    t_id part_ids[PART_TRIPLE + 1] = {
+    id_t part_ids[PART_TRIPLE + 1] = {
         NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID
     };
     {
@@ -668,13 +673,13 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
                                      "ORDER BY part DESC, node_type ASC" "\n" \
         ;
         sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_parts_get), find_parts_sql);
-        const t_sqlite_rc rc3 = bind_stmt(stmt, context_node, statement);
-        for( t_sqlite_rc rc = sqlite3_step(stmt); rc == SQLITE_ROW; rc = sqlite3_step(stmt) ) {
+        const sqlite_rc_t rc3 = bind_stmt(stmt, context_node, statement);
+        for( sqlite_rc_t rc = sqlite3_step(stmt); rc == SQLITE_ROW; rc = sqlite3_step(stmt) ) {
             switch( rc ) {
             case SQLITE_ROW: {
-                const t_part idx = (t_part)sqlite3_column_int(stmt, 0);
+                const part_t idx = (part_t)sqlite3_column_int(stmt, 0);
                 // const triple_node_type type = (triple_node_type)sqlite3_column_int(stmt, 1);
-                part_ids[idx] = (t_id)sqlite3_column_int64(stmt, 2);
+                part_ids[idx] = (id_t)sqlite3_column_int64(stmt, 2);
                 break;
             }
             default:
@@ -702,11 +707,11 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
         const char *lookup_triple_sql = "SELECT rowid FROM " TABLE_TRIPLES_NAME "\n" \
                                         "WHERE s_uri=? AND s_blank=? AND p_uri=? AND o_uri=? AND o_blank=? AND o_lit=? AND c_uri=?";
         sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_spocs_get), lookup_triple_sql);
-        for( int i = PART_C; i >= 0; i-- ) {
-            const t_sqlite_rc rc_ = sqlite3_bind_int64(stmt, i + 1, part_ids[i]);
+        for( int i = PART_C; i >= PART_S_U; i-- ) {
+            const sqlite_rc_t rc_ = sqlite3_bind_int64(stmt, i + 1, part_ids[i]);
             assert(rc_ == SQLITE_OK && "ouch");
         }
-        const t_sqlite_rc rc = sqlite3_step(stmt);
+        const sqlite_rc_t rc = sqlite3_step(stmt);
         if( rc == SQLITE_ROW ) {
             transaction_rollback(storage, begin);
             return statement;
@@ -720,13 +725,13 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
         // create the triple
         const char *insert_triple_sql = "INSERT INTO " TABLE_TRIPLES_NAME "\n" \
                                         "(s_uri,s_blank,p_uri,o_uri,o_blank,o_lit,c_uri) VALUES" "\n" \
-                                        "(      ?,          ?,      ?,      ?,          ?,      ?,      ?)";
+                                        "(  ?  ,   ?   ,  ?  ,  ?  ,   ?   ,  ?  ,  ?  )";
         sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_spocs_set), insert_triple_sql);
-        for( int i = PART_C; i >= 0; i-- ) {
-            const t_sqlite_rc rc = sqlite3_bind_int64(stmt, i + 1, part_ids[i]);
+        for( int i = PART_C; i >= PART_S_U; i-- ) {
+            const sqlite_rc_t rc = sqlite3_bind_int64(stmt, i + 1, part_ids[i]);
             assert(rc == SQLITE_OK && "ouch");
         }
-        const t_sqlite_rc rc = sqlite3_step(stmt);
+        const sqlite_rc_t rc = sqlite3_step(stmt);
         if( rc == SQLITE_DONE ) {
             // assert(size + 1 == pub_size(storage) && "hu?");
             transaction_commit(storage, begin);
@@ -756,7 +761,7 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
         return RET_ERROR;
     }
 
-    t_instance *db_ctx = LIBRDF_CALLOC( t_instance *, 1, sizeof(*db_ctx) );
+    instance_t *db_ctx = LIBRDF_CALLOC( instance_t *, 1, sizeof(*db_ctx) );
     if( !db_ctx ) {
         free_hash(options);
         return RET_ERROR;
@@ -781,8 +786,8 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
 
     char *synchronous = synchronous = librdf_hash_get(options, "synchronous");
     if( synchronous ) {
-        for( int i = 0; sqlite_synchronous_flags[i]; i++ ) {
-            if( !strcmp(synchronous, sqlite_synchronous_flags[i]) ) {
+        for( syncronous_flag_t i = 0; synchronous_flags[i]; i++ ) {
+            if( !strcmp(synchronous, synchronous_flags[i]) ) {
                 db_ctx->synchronous = i;
                 break;
             }
@@ -797,12 +802,12 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
 
 static void pub_terminate(librdf_storage *storage)
 {
-    t_instance *db_ctx = get_instance(storage);
+    instance_t *db_ctx = get_instance(storage);
     if( db_ctx == NULL )
         return;
     if( db_ctx->name )
         LIBRDF_FREE(char *, (void *)db_ctx->name);
-    LIBRDF_FREE(librdf_storage_sqlite_terminate, db_ctx);
+    LIBRDF_FREE(instance_t *, db_ctx);
 }
 
 
@@ -811,15 +816,15 @@ static int pub_close(librdf_storage *storage);
 
 static int pub_open(librdf_storage *storage, librdf_model *model)
 {
-    t_instance *db_ctx = get_instance(storage);
-    const t_boolean db_file_exists = 0 == access(db_ctx->name, F_OK);
+    instance_t *db_ctx = get_instance(storage);
+    const boolean_t db_file_exists = 0 == access(db_ctx->name, F_OK);
     if( db_ctx->is_new && db_file_exists )
         unlink(db_ctx->name);
 
     // open DB
     db_ctx->db = NULL;
     {
-        const int rc = sqlite3_open(db_ctx->name, &db_ctx->db);
+        const sqlite_rc_t rc = sqlite3_open(db_ctx->name, &db_ctx->db);
         char *errmsg = NULL;
         if( rc != SQLITE_OK )
             errmsg = (char *)sqlite3_errmsg(db_ctx->db);
@@ -838,9 +843,9 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
     // set DB PRAGMA 'synchronous'
     if( db_ctx->synchronous >= SYNC_OFF ) {
         char request[250];
-        const size_t len = snprintf(request, sizeof(request) - 1, "PRAGMA synchronous=%s;", sqlite_synchronous_flags[db_ctx->synchronous]);
+        const size_t len = snprintf(request, sizeof(request) - 1, "PRAGMA synchronous=%s;", synchronous_flags[db_ctx->synchronous]);
         assert(len < sizeof(request) && "buffer too small.");
-        const int rc = librdf_storage_sqlite_exec(storage, request, NULL, NULL, 0);
+        const sqlite_rc_t rc = librdf_storage_sqlite_exec(storage, request, NULL, NULL, 0);
         if( rc ) {
             pub_close(storage);
             return RET_ERROR;
@@ -849,7 +854,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
 
     // create tables and indices if required.
     if( db_ctx->is_new ) {
-        const t_sqlite_rc begin = transaction_start(storage);
+        const sqlite_rc_t begin = transaction_start(storage);
 
         const char *schema_sql = // generated via tools/sql2c.sh schema.sql
                                  "CREATE TABLE so_uris (" "\n" \
@@ -936,7 +941,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
 
 static int pub_close(librdf_storage *storage)
 {
-    t_instance *db_ctx = get_instance(storage);
+    instance_t *db_ctx = get_instance(storage);
 
     finalize_stmt( &(db_ctx->stmt_txn_start) );
     finalize_stmt( &(db_ctx->stmt_txn_commit) );
@@ -954,7 +959,7 @@ static int pub_close(librdf_storage *storage)
     finalize_stmt( &(db_ctx->stmt_size) );
     finalize_stmt( &(db_ctx->stmt_find) );
 
-    const int rc = sqlite3_close(db_ctx->db);
+    const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
     if( rc != SQLITE_OK ) {
         char *errmsg = (char *)sqlite3_errmsg(db_ctx->db);
         librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL,
@@ -992,19 +997,19 @@ static librdf_node *pub_get_feature(librdf_storage *storage, librdf_uri *feature
 #pragma mark Transactions
 
 
-static t_sqlite_rc pub_transaction_start(librdf_storage *storage)
+static sqlite_rc_t pub_transaction_start(librdf_storage *storage)
 {
     return transaction_start(storage);
 }
 
 
-static t_sqlite_rc pub_transaction_commit(librdf_storage *storage)
+static sqlite_rc_t pub_transaction_commit(librdf_storage *storage)
 {
     return transaction_commit(storage, SQLITE_OK);
 }
 
 
-static t_sqlite_rc pub_transaction_rollback(librdf_storage *storage)
+static sqlite_rc_t pub_transaction_rollback(librdf_storage *storage)
 {
     return transaction_rollback(storage, SQLITE_OK);
 }
@@ -1016,21 +1021,22 @@ static t_sqlite_rc pub_transaction_rollback(librdf_storage *storage)
 typedef struct
 {
     librdf_storage *storage;
+    librdf_statement *pattern;
     librdf_statement *statement;
     librdf_node *context;
 
     sqlite3_stmt *stmt;
-    t_sqlite_rc txn;
-    t_sqlite_rc rc;
-    t_boolean dirty;
+    sqlite_rc_t txn;
+    sqlite_rc_t rc;
+    boolean_t dirty;
 }
-t_iterator;
+iterator_t;
 
 
 static int pub_iter_end_of_stream(void *_ctx)
 {
     assert(_ctx && "context mustn't be NULL");
-    t_iterator *ctx = (t_iterator *)_ctx;
+    iterator_t *ctx = (iterator_t *)_ctx;
     return ctx->rc != SQLITE_ROW;
 }
 
@@ -1040,7 +1046,7 @@ static int pub_iter_next_statement(void *_ctx)
     assert(_ctx && "context mustn't be NULL");
     if( pub_iter_end_of_stream(_ctx) )
         return RET_ERROR;
-    t_iterator *ctx = (t_iterator *)_ctx;
+    iterator_t *ctx = (iterator_t *)_ctx;
     ctx->dirty = BOOL_YES;
     ctx->rc = sqlite3_step(ctx->stmt);
     if( pub_iter_end_of_stream(_ctx) )
@@ -1053,7 +1059,7 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
 {
     assert(_ctx && "context mustn't be NULL");
     const librdf_iterator_get_method_flags flags = (librdf_iterator_get_method_flags)_flags;
-    t_iterator *ctx = (t_iterator *)_ctx;
+    iterator_t *ctx = (iterator_t *)_ctx;
 
     switch( flags ) {
     case LIBRDF_ITERATOR_GET_METHOD_GET_OBJECT: {
@@ -1113,6 +1119,7 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
                 librdf_statement_set_object(st, node);
             }
             assert(librdf_statement_is_complete(st) && "hu?");
+            assert(librdf_statement_match(ctx->statement, ctx->pattern) && "match candidate doesn't match.");
             ctx->dirty = BOOL_NO;
         }
         return ctx->statement;
@@ -1130,13 +1137,15 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
 static void pub_iter_finished(void *_ctx)
 {
     assert(_ctx && "context mustn't be NULL");
-    t_iterator *ctx = (t_iterator *)_ctx;
+    iterator_t *ctx = (iterator_t *)_ctx;
+    if( ctx->pattern )
+        librdf_free_statement(ctx->pattern);
     if( ctx->statement )
         librdf_free_statement(ctx->statement);
     librdf_storage_remove_reference(ctx->storage);
     transaction_rollback(ctx->storage, ctx->txn);
     sqlite3_finalize(ctx->stmt);
-    LIBRDF_FREE(t_stream *, ctx);
+    LIBRDF_FREE(iterator_t *, ctx);
 }
 
 
@@ -1145,13 +1154,13 @@ static void pub_iter_finished(void *_ctx)
 
 static int pub_size(librdf_storage *storage)
 {
-    t_instance *db_ctx = get_instance(storage);
-    t_sqlite_rc begin = transaction_start(storage);
+    instance_t *db_ctx = get_instance(storage);
+    sqlite_rc_t begin = transaction_start(storage);
 
     sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(rowid) FROM " TABLE_TRIPLES_NAME);
-    const t_sqlite_rc rc = sqlite3_step(stmt);
+    const sqlite_rc_t rc = sqlite3_step(stmt);
     if( rc == SQLITE_ROW ) {
-        const t_id ret = (t_id)sqlite3_column_int64(stmt, 0);
+        const id_t ret = (id_t)sqlite3_column_int64(stmt, 0);
         transaction_rollback(storage, begin);
         return ret;
     }
@@ -1175,9 +1184,9 @@ static int pub_contains_statement(librdf_storage *storage, librdf_statement *sta
 
 static librdf_stream *pub_context_find_statements(librdf_storage *storage, librdf_statement *statement, librdf_node *context_node)
 {
-    t_sqlite_rc begin = transaction_start(storage);
+    sqlite_rc_t begin = transaction_start(storage);
 
-    t_instance *db_ctx = get_instance(storage);
+    instance_t *db_ctx = get_instance(storage);
     const char *find_triples_sql = // generated via tools/sql2c.sh find_triples.sql
                                    "SELECT" "\n" \
                                    "  s_uri" "\n" \
@@ -1205,16 +1214,17 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
 
     // librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
 
-    const t_sqlite_rc rc = bind_stmt(stmt, context_node, statement);
+    const sqlite_rc_t rc = bind_stmt(stmt, context_node, statement);
     assert(rc == SQLITE_OK && "foo");
 
     // printExplainQueryPlan(stmt);
 
     librdf_world *w = get_world(storage);
     // create iterator
-    t_iterator *iter = LIBRDF_CALLOC(t_iterator *, sizeof(t_iterator), 1);
+    iterator_t *iter = LIBRDF_CALLOC(iterator_t *, sizeof(iterator_t), 1);
     iter->storage = storage;
     iter->context = context_node;
+    iter->pattern = librdf_new_statement_from_statement(statement);
     iter->stmt = stmt;
     iter->txn = begin;
     iter->rc = sqlite3_step(stmt);

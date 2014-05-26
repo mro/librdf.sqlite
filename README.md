@@ -8,6 +8,29 @@ Considered alpha, *don't use in production*.
 
 ## Usage
 
+    #include "rdf_storage_sqlite_mro.h"
     ....
     const char* options = "new='yes', contexts='no'";
     librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
+
+## Design Goals
+
+| Quality         | very good | good | normal | irrelevant |
+|-----------------|:---------:|:----:|:------:|:----------:|
+| Functionality   |           |      |    ×   |            |
+| Reliability     |           |  ×   |        |            |
+| Usability       |           |      |        |     ×      |
+| Efficiency      |     ×     |      |        |            |
+| Changeability   |           |  ×   |        |            |
+| Portability     |           |  ×   |        |            |
+
+Currently 50% code and 90% runtime saving. But search+delete are yet to come.
+
+- intense use of [SQLite prepared statements](https://www.sqlite.org/c3ref/stmt.html) and
+  [bound values](https://www.sqlite.org/c3ref/bind_blob.html):
+  - no stringbuffers
+  - no strcpy/memcpy,
+  - no SQL escaping,
+- re-use compiled statements where possible (at the cost of thread safety),
+- as few SQL statements as possible (at the cost of some non-trivial ones),
+- SQLite indexes (at the cost of larger DB files).
