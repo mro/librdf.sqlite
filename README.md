@@ -13,6 +13,8 @@ Considered alpha, *don't use in production*.
     const char* options = "new='yes', contexts='no'";
     librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
 
+See e.g. in my [RedlandDemo fork](https://github.com/mro/RedlandDemo/tree/develop).
+
 ## Design Goals
 
 | Quality         | very good | good | normal | irrelevant |
