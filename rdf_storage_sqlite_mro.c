@@ -57,10 +57,19 @@ static inline boolean_t isNULL_ID(const id_t x)
 #define RET_OK 0
 #define F_OK 0
 
-#define NULL_LANG ""
+/** C-String type for URIs. */
+typedef unsigned char *str_uri_t;
+/** C-String type for blank identifiers. */
+typedef unsigned char *str_blank_t;
+/** C-String type for literal values. */
+typedef unsigned char *str_lit_val_t;
+/** C-String type for (xml) language ids. */
+typedef char *str_lang_t;
+
+#define NULL_LANG ( (str_lang_t)"" )
 #define isNULL_LANG(x) ( (x) == NULL || (x)[0] == '\0' )
 
-#define NULL_URI ( (const unsigned char *)"" )
+#define NULL_URI ( (str_uri_t)"" )
 #define isNULL_URI(x) ( (x) == NULL || (x)[0] == '\0' )
 
 #define isNULL_BLANK(x) ( (x) == NULL || (x)[0] == '\0' )
@@ -284,23 +293,23 @@ static inline sqlite_rc_t bind_uri(sqlite3_stmt *stmt, const char *name, librdf_
 }
 
 
-static inline const unsigned char *column_uri_string(sqlite3_stmt *stmt, const int iCol)
+static inline const str_uri_t column_uri_string(sqlite3_stmt *stmt, const int iCol)
 {
-    const unsigned char *ret = sqlite3_column_text(stmt, iCol);
+    const str_uri_t ret = (str_uri_t)sqlite3_column_text(stmt, iCol);
     return isNULL_URI(ret) ? NULL : ret;
 }
 
 
-static inline const unsigned char *column_blank_string(sqlite3_stmt *stmt, const int iCol)
+static inline const str_blank_t column_blank_string(sqlite3_stmt *stmt, const int iCol)
 {
-    const unsigned char *ret = sqlite3_column_text(stmt, iCol);
+    const str_blank_t ret = (str_blank_t)sqlite3_column_text(stmt, iCol);
     return isNULL_BLANK(ret) ? NULL : ret;
 }
 
 
-static inline const char *column_language(sqlite3_stmt *stmt, const int iCol)
+static inline const str_lang_t column_language(sqlite3_stmt *stmt, const int iCol)
 {
-    const char *ret = (const char *)sqlite3_column_text(stmt, iCol);
+    const str_lang_t ret = (const str_lang_t)sqlite3_column_text(stmt, iCol);
     return isNULL_LANG(ret) ? NULL : ret;
 }
 
@@ -440,8 +449,8 @@ static id_t create_uri(instance_t *db_ctx, librdf_uri *uri, sqlite3_stmt *stmt)
         return NULL_ID;
     assert(stmt && "Statement is null");
     size_t len = 0;
-    const char *txt = (const char *)librdf_uri_as_counted_string(uri, &len);
-    const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, txt, (int)len, SQLITE_STATIC);
+    const str_uri_t txt = (const str_uri_t)librdf_uri_as_counted_string(uri, &len);
+    const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, (const char *)txt, (int)len, SQLITE_STATIC);
     assert(rc0 == SQLITE_OK && "bind fail");
     return insert(db_ctx->db, stmt);
 }
@@ -487,7 +496,7 @@ static id_t create_blank(instance_t *db_ctx, librdf_node *node, sqlite3_stmt *st
     if( !node || !librdf_node_is_blank(node) )
         return NULL_ID;
     size_t len = 0;
-    unsigned char *val = librdf_node_get_counted_blank_identifier(node, &len);
+    str_blank_t val = librdf_node_get_counted_blank_identifier(node, &len);
     if( val == NULL )
         return NULL_ID;
     const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, (const char *)val, (int)len, SQLITE_STATIC);
@@ -508,8 +517,8 @@ static id_t create_literal(instance_t *db_ctx, librdf_node *node, const id_t dat
         return NULL_ID;
     // void * p = librdf_node_get_literal_value_datatype_uri(node);
     size_t len = 0;
-    unsigned char *txt = librdf_node_get_literal_value_as_counted_string(node, &len);
-    char *language = librdf_node_get_literal_value_language(node);
+    str_lit_val_t txt = librdf_node_get_literal_value_as_counted_string(node, &len);
+    str_lang_t language = librdf_node_get_literal_value_language(node);
     if( language == NULL )
         language = NULL_LANG;
     const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, (const char *)txt, (int)len, SQLITE_STATIC);
@@ -600,7 +609,7 @@ static sqlite_rc_t bind_stmt(sqlite3_stmt *stmt, librdf_node *context_node, libr
         rc = bind_text(stmt, ":o_blank", librdf_node_get_counted_blank_identifier(o, &len), len);
         rc = bind_text(stmt, ":o_text", librdf_node_get_literal_value_as_counted_string(o, &len), len);
         rc = bind_uri( stmt, ":o_datatype", librdf_node_get_literal_value_datatype_uri(o) );
-        char *language = librdf_node_get_literal_value_language(o);
+        str_lang_t language = librdf_node_get_literal_value_language(o);
         rc = bind_text(stmt, ":o_language", (const unsigned char *)(language ? language : NULL_LANG), -1);
     }
 
@@ -1073,11 +1082,11 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
             {
                 /* subject */
                 librdf_node *node = NULL;
-                const unsigned char *uri = column_uri_string(stm, 0);
+                const str_uri_t uri = column_uri_string(stm, 0);
                 if( uri )
                     node = librdf_new_node_from_uri_string(w, uri);
                 if( !node ) {
-                    const unsigned char *blank = column_blank_string(stm, 1);
+                    const str_blank_t blank = column_blank_string(stm, 1);
                     if( blank )
                         node = librdf_new_node_from_blank_identifier(w, blank);
                 }
@@ -1088,7 +1097,7 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
             {
                 /* predicate */
                 librdf_node *node = NULL;
-                const unsigned char *uri = column_uri_string(stm, 2);
+                const str_uri_t uri = column_uri_string(stm, 2);
                 if( uri )
                     node = librdf_new_node_from_uri_string(w, uri);
                 if( !node )
@@ -1098,18 +1107,18 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
             {
                 /* object */
                 librdf_node *node = NULL;
-                const unsigned char *uri = column_uri_string(stm, 3);
+                const str_uri_t uri = column_uri_string(stm, 3);
                 if( uri )
                     node = librdf_new_node_from_uri_string(w, uri);
                 if( !node ) {
-                    const unsigned char *blank = column_blank_string(stm, 4);
+                    const str_blank_t blank = column_blank_string(stm, 4);
                     if( blank )
                         node = librdf_new_node_from_blank_identifier(w, blank);
                 }
                 if( !node ) {
-                    const unsigned char *val = sqlite3_column_text(stm, 5);
-                    const char *lang = (const char *)column_language(stm, 6);
-                    const unsigned char *uri = column_uri_string(stm, 7);
+                    const str_lit_val_t val = (str_lit_val_t)sqlite3_column_text(stm, 5);
+                    const str_lang_t lang = (str_lang_t)column_language(stm, 6);
+                    const str_uri_t uri = column_uri_string(stm, 7);
                     librdf_uri *t = uri ? librdf_new_uri(w, uri) : NULL;
                     node = librdf_new_node_from_typed_literal(w, val, lang, t);
                     librdf_free_uri(t);
