@@ -2,6 +2,8 @@
 Improved [SQLite](http://sqlite.org) RDF triple [storage module](http://librdf.org/docs/api/redland-storage-modules.html)
 for [librdf](http://librdf.org/).
 
+Cross platform, plain C source file. Comes with a [cocoapod](http://cocoapods.org/) for those targeting iOS.
+
 Inspired by the [official sqlite store](https://github.com/dajobe/librdf/blob/master/src/rdf_storage_sqlite.c).
 
 Considered alpha, *don't use in production*.
