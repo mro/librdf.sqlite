@@ -1276,6 +1276,20 @@ static int pub_context_add_statement(librdf_storage *storage, librdf_node *conte
 }
 
 
+static int pub_context_add_statements(librdf_storage *storage, librdf_node *context_node, librdf_stream *statement_stream)
+{
+    const sqlite_rc_t txn = transaction_start(storage);
+    for( librdf_statement *stmt = librdf_stream_get_object(statement_stream); !librdf_stream_end(statement_stream); librdf_stream_next(statement_stream) ) {
+        const int rc = pub_context_add_statement(storage, context_node, stmt);
+        if( RET_OK != rc ) {
+            transaction_rollback(storage, txn);
+            return rc;
+        }
+    }
+    return transaction_commit(storage, txn);
+}
+
+
 static int pub_add_statement(librdf_storage *storage, librdf_statement *statement)
 {
     return pub_context_add_statement(storage, NULL, statement);
@@ -1284,11 +1298,7 @@ static int pub_add_statement(librdf_storage *storage, librdf_statement *statemen
 
 static int pub_add_statements(librdf_storage *storage, librdf_stream *statement_stream)
 {
-    // begin txn
-    // iterate
-    // rollback/commit
-    assert(0 && "not implemented yet.");
-    return RET_ERROR;
+    return pub_context_add_statements(storage, NULL, statement_stream);
 }
 
 
@@ -1335,6 +1345,7 @@ static void register_factory(librdf_storage_factory *factory)
     factory->serialise                  = pub_serialise;
     factory->find_statements            = pub_find_statements;
     factory->context_add_statement      = pub_context_add_statement;
+    factory->context_add_statements     = pub_context_add_statements;
     factory->context_remove_statement   = pub_context_remove_statement;
     factory->context_remove_statements  = pub_context_remove_statements;
     factory->context_serialise          = pub_context_serialise;
