@@ -28,7 +28,7 @@ echo "\tconst char *$(basename "$1" .sql)_sql = // generated via $0 $@"
 # turn comments into whitespace
 sed -e 's/^--.*$//' "$1" | while IFS= read sql # http://stackoverflow.com/a/7879523
 do
-  if [ "$sql" == "" ] ; then continue ; fi  # ignore blank lines
+  if [ "$sql" = "" ] ; then continue ; fi  # ignore blank lines
   # should escape ", but I don't care for now.
   echo "\t\"$sql\" \"\\\n\" \\"
 done
