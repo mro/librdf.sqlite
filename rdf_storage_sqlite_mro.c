@@ -266,6 +266,15 @@ static void finalize_stmt(sqlite3_stmt **pStmt)
 }
 
 
+static sqlite_rc_t exec_stmt(sqlite3 *db, const char *sql)
+{
+    char *errmsg = NULL;
+    const sqlite_rc_t rc = sqlite3_exec(db, sql, NULL, NULL, &errmsg);
+    sqlite3_free(errmsg);
+    return rc;
+}
+
+
 static inline sqlite_rc_t bind_int(sqlite3_stmt *stmt, const char *name, const id_t _id)
 {
     assert(stmt && "stmt mandatory");
@@ -321,7 +330,7 @@ static inline const str_lang_t column_language(sqlite3_stmt *stmt, const int iCo
 static id_t insert(sqlite3 *db, sqlite3_stmt *stmt)
 {
     const sqlite_rc_t rc3 = sqlite3_step(stmt);
-    if( rc3 == SQLITE_DONE ) {
+    if( SQLITE_DONE == rc3 ) {
         const sqlite3_int64 r = sqlite3_last_insert_rowid(db);
         const sqlite_rc_t rc2 = sqlite3_reset(stmt);
         assert(rc2 == SQLITE_OK && "ouch");
@@ -337,9 +346,9 @@ static sqlite_rc_t transaction_start(librdf_storage *storage)
     if( db_ctx->in_transaction )
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_start), "BEGIN IMMEDIATE TRANSACTION;") );
-    db_ctx->in_transaction = rc == SQLITE_DONE;
+    db_ctx->in_transaction = SQLITE_DONE == rc;
     assert(db_ctx->in_transaction != BOOL_NO && "ouch");
-    return rc == SQLITE_DONE ? SQLITE_OK : rc;
+    return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
 
@@ -351,9 +360,9 @@ static sqlite_rc_t transaction_commit(librdf_storage *storage, const sqlite_rc_t
     if( db_ctx->in_transaction == BOOL_NO )
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_commit), "COMMIT  TRANSACTION;") );
-    db_ctx->in_transaction = !(rc == SQLITE_DONE);
+    db_ctx->in_transaction = !(SQLITE_DONE == rc);
     assert(db_ctx->in_transaction == BOOL_NO && "ouch");
-    return rc == SQLITE_DONE ? SQLITE_OK : rc;
+    return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
 
@@ -365,9 +374,9 @@ static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc
     if( db_ctx->in_transaction == BOOL_NO )
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_rollback), "ROLLBACK TRANSACTION;") );
-    db_ctx->in_transaction = !(rc == SQLITE_DONE);
+    db_ctx->in_transaction = !(SQLITE_DONE == rc);
     assert(db_ctx->in_transaction == BOOL_NO && "ouch");
-    return rc == SQLITE_DONE ? SQLITE_OK : rc;
+    return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
 
@@ -431,7 +440,7 @@ static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *reque
         }
     }
 
-    return status == SQLITE_OK ? RET_OK : RET_ERROR;
+    return SQLITE_OK == status ? RET_OK : RET_ERROR;
 }
 
 
@@ -687,7 +696,7 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
         ;
         sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_parts_get), find_parts_sql);
         const sqlite_rc_t rc3 = bind_stmt(stmt, context_node, statement);
-        for( sqlite_rc_t rc = sqlite3_step(stmt); rc == SQLITE_ROW; rc = sqlite3_step(stmt) ) {
+        for( sqlite_rc_t rc = sqlite3_step(stmt); SQLITE_ROW == rc; rc = sqlite3_step(stmt) ) {
             switch( rc ) {
             case SQLITE_ROW: {
                 const part_t idx = (part_t)sqlite3_column_int(stmt, 0);
@@ -725,7 +734,7 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
             assert(rc_ == SQLITE_OK && "ouch");
         }
         const sqlite_rc_t rc = sqlite3_step(stmt);
-        if( rc == SQLITE_ROW ) {
+        if( SQLITE_ROW == rc ) {
             transaction_rollback(storage, begin);
             return statement;
         }
@@ -745,7 +754,7 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
             assert(rc == SQLITE_OK && "ouch");
         }
         const sqlite_rc_t rc = sqlite3_step(stmt);
-        if( rc == SQLITE_DONE ) {
+        if( SQLITE_DONE == rc ) {
             // assert(size + 1 == pub_size(storage) && "hu?");
             transaction_commit(storage, begin);
             return statement;
@@ -845,14 +854,11 @@ static int pub_close(librdf_storage *storage)
     finalize_stmt( &(db_ctx->stmt_find) );
 
     const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
-    if( rc != SQLITE_OK ) {
-        char *errmsg = (char *)sqlite3_errmsg(db_ctx->db);
-        librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL,
-                   "SQLite database %s close failed - %s", db_ctx->name, errmsg);
-        pub_close(storage);
-        return RET_ERROR;
-    }
-    return RET_OK;
+    if( SQLITE_OK == rc )
+        return RET_OK;
+    char *errmsg = (char *)sqlite3_errmsg(db_ctx->db);
+    librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "SQLite database %s close failed - %s", db_ctx->name, errmsg);
+    return RET_ERROR;
 }
 
 
@@ -882,100 +888,172 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         // sqlite3_profile(db_ctx->db, &trace, NULL);
     }
 
-    // set DB PRAGMA 'synchronous'
+    // set DB session PRAGMAs
     if( db_ctx->synchronous >= SYNC_OFF ) {
-        char request[250];
-        const size_t len = snprintf(request, sizeof(request) - 1, "PRAGMA synchronous=%s;", synchronous_flags[db_ctx->synchronous]);
-        assert(len < sizeof(request) && "buffer too small.");
-        const sqlite_rc_t rc = librdf_storage_sqlite_exec(storage, request, NULL, NULL, 0);
-        if( rc ) {
+        char sql[250];
+        const size_t len = snprintf(sql, sizeof(sql) - 1, "PRAGMA synchronous=%s;", synchronous_flags[db_ctx->synchronous]);
+        assert(len < sizeof(sql) && "buffer too small.");
+        if( exec_stmt(db_ctx->db, sql) != SQLITE_OK ) {
             pub_close(storage);
             return RET_ERROR;
         }
     }
+    {
+        const char *const sqls[] = {
+            "PRAGMA foreign_keys = OFF",
+            "PRAGMA recursive_triggers = ON",
+            "PRAGMA encoding = 'UTF-8'",
+            NULL
+        };
+        for( int v = 0; sqls[v]; v++ ) {
+            if( SQLITE_OK != exec_stmt(db_ctx->db, sqls[v]) ) {
+                pub_close(storage);
+                return RET_ERROR;
+            }
+        }
+    }
 
-    // create tables and indices if DB is new.
-    if( db_ctx->is_new ) {
-        const sqlite_rc_t begin = transaction_start(storage);
-
-        const char *schema_sql = // generated via tools/sql2c.sh schema.sql
-                                 "CREATE TABLE so_uris (" "\n" \
-                                 "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                 "  ,uri TEXT NOT NULL" "\n" \
-                                 ");" "\n" \
-                                 "CREATE UNIQUE INDEX so_uris_index ON so_uris (uri);" "\n" \
-                                 "CREATE TABLE so_blanks (" "\n" \
-                                 "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                 "  ,blank TEXT NULL" "\n" \
-                                 ");" "\n" \
-                                 "CREATE UNIQUE INDEX so_blanks_index ON so_blanks (blank);" "\n" \
-                                 "CREATE TABLE p_uris (" "\n" \
-                                 "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                 "  ,uri TEXT NOT NULL" "\n" \
-                                 ");" "\n" \
-                                 "CREATE UNIQUE INDEX p_uris_index ON p_uris (uri);" "\n" \
-                                 "CREATE TABLE t_uris (" "\n" \
-                                 "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                 "  ,uri TEXT NOT NULL" "\n" \
-                                 ");" "\n" \
-                                 "CREATE UNIQUE INDEX t_uris_index ON t_uris (uri);" "\n" \
-                                 "CREATE TABLE o_literals (" "\n" \
-                                 "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                 "  ,datatype INTEGER NOT NULL REFERENCES t_uris (id) ON DELETE NO ACTION" "\n" \
-                                 "  ,text TEXT NOT NULL" "\n" \
-                                 "  ,language TEXT NOT NULL" "\n" \
-                                 ");" "\n" \
-                                 "CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype);" "\n" \
-                                 "CREATE TABLE c_uris (" "\n" \
-                                 "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                 "  ,uri TEXT NOT NULL" "\n" \
-                                 ");" "\n" \
-                                 "CREATE UNIQUE INDEX c_uris_index ON c_uris (uri);" "\n" \
-                                 "INSERT INTO so_uris (id, uri) VALUES (0,'');" "\n" \
-                                 "INSERT INTO so_blanks (id, blank) VALUES (0,'');" "\n" \
-                                 "INSERT INTO c_uris (id, uri) VALUES (0,'');" "\n" \
-                                 "INSERT INTO t_uris (id, uri) VALUES (0,'');" "\n" \
-                                 "CREATE TABLE spocs (" "\n" \
-                                 "  s_uri INTEGER NOT NULL    REFERENCES so_uris (id) ON DELETE NO ACTION" "\n" \
-                                 "  ,s_blank INTEGER NOT NULL REFERENCES so_blanks (id) ON DELETE NO ACTION" "\n" \
-                                 "  ,p_uri INTEGER NOT NULL   REFERENCES p_uris (id) ON DELETE NO ACTION" "\n" \
-                                 "  ,o_uri INTEGER NOT NULL   REFERENCES so_uris (id) ON DELETE NO ACTION" "\n" \
-                                 "  ,o_blank INTEGER NOT NULL REFERENCES so_blanks (id) ON DELETE NO ACTION" "\n" \
-                                 "  ,o_lit INTEGER NOT NULL   REFERENCES t_literals (id) ON DELETE NO ACTION" "\n" \
-                                 "  ,c_uri INTEGER NOT NULL   REFERENCES c_uris (id) ON DELETE NO ACTION" "\n" \
-                                 ");" "\n" \
-                                 "CREATE UNIQUE INDEX spocs_index ON spocs (s_uri,s_blank,p_uri,o_uri,o_blank,o_lit,c_uri);" "\n" \
-                                 "CREATE VIEW spocs_full AS" "\n" \
-                                 "SELECT" "\n" \
-                                 "  s_uris.uri       AS s_uri" "\n" \
-                                 "  ,s_blanks.blank  AS s_blank" "\n" \
-                                 "  ,p_uris.uri      AS p_uri" "\n" \
-                                 "  ,o_uris.uri      AS o_uri" "\n" \
-                                 "  ,o_blanks.blank  AS o_blank" "\n" \
-                                 "  ,o_literals.text AS o_text" "\n" \
-                                 "  ,o_literals.language AS o_language" "\n" \
-                                 "  ,o_lit_uris.uri  AS o_datatype" "\n" \
-                                 "  ,c_uris.uri      AS c_uri" "\n" \
-                                 "FROM spocs" "\n" \
-                                 "INNER JOIN so_uris    AS s_uris     ON spocs.s_uri      = s_uris.id" "\n" \
-                                 "INNER JOIN so_blanks  AS s_blanks   ON spocs.s_blank    = s_blanks.id" "\n" \
-                                 "INNER JOIN p_uris     AS p_uris     ON spocs.p_uri      = p_uris.id" "\n" \
-                                 "INNER JOIN so_uris    AS o_uris     ON spocs.o_uri      = o_uris.id" "\n" \
-                                 "INNER JOIN so_blanks  AS o_blanks   ON spocs.o_blank    = o_blanks.id" "\n" \
-                                 "LEFT OUTER JOIN o_literals AS o_literals ON spocs.o_lit = o_literals.id" "\n" \
-                                 "LEFT OUTER JOIN t_uris     AS o_lit_uris ON o_literals.datatype   = o_lit_uris.id" "\n" \
-                                 "INNER JOIN c_uris     AS c_uris     ON spocs.c_uri      = c_uris.id" "\n" \
-                                 ";" "\n" \
-                                 "PRAGMA user_version=2;" "\n" \
-        ;
-
-        if( RET_OK != librdf_storage_sqlite_exec(storage, schema_sql, NULL, NULL, 0) ) {
-            transaction_rollback(storage, begin);
+    // check & update schema (run migrations)
+    {
+        sqlite3_stmt *stmt = NULL;
+        prep_stmt(db_ctx->db, &stmt, "PRAGMA user_version");
+        if( SQLITE_ROW != sqlite3_step(stmt) ) {
+            sqlite3_finalize(stmt);
             pub_close(storage);
             return RET_ERROR;
         }
+        const int schema_version = sqlite3_column_int(stmt, 0);
+        if( SQLITE_DONE != sqlite3_step(stmt) ) {
+            sqlite3_finalize(stmt);
+            pub_close(storage);
+            return RET_ERROR;
+        }
+        sqlite3_finalize(stmt);
 
-        transaction_commit(storage, begin);
+        const char *schema_mig_to_1_sql = // generated via tools/sql2c.sh schema_mig_to_1.sql
+                                          "CREATE TABLE so_uris (" "\n" \
+                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
+                                          "  ,uri TEXT NOT NULL" "\n" \
+                                          ");" "\n" \
+                                          "CREATE UNIQUE INDEX so_uris_index ON so_uris (uri);" "\n" \
+                                          "CREATE TABLE so_blanks (" "\n" \
+                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
+                                          "  ,blank TEXT NULL" "\n" \
+                                          ");" "\n" \
+                                          "CREATE UNIQUE INDEX so_blanks_index ON so_blanks (blank);" "\n" \
+                                          "CREATE TABLE p_uris (" "\n" \
+                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
+                                          "  ,uri TEXT NOT NULL" "\n" \
+                                          ");" "\n" \
+                                          "CREATE UNIQUE INDEX p_uris_index ON p_uris (uri);" "\n" \
+                                          "CREATE TABLE t_uris (" "\n" \
+                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
+                                          "  ,uri TEXT NOT NULL" "\n" \
+                                          ");" "\n" \
+                                          "CREATE UNIQUE INDEX t_uris_index ON t_uris (uri);" "\n" \
+                                          "CREATE TABLE o_literals (" "\n" \
+                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
+                                          "  ,datatype INTEGER NOT NULL REFERENCES t_uris (id)" "\n" \
+                                          "  ,text TEXT NOT NULL" "\n" \
+                                          "  ,language TEXT NOT NULL" "\n" \
+                                          ");" "\n" \
+                                          "CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype);" "\n" \
+                                          "CREATE TABLE c_uris (" "\n" \
+                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
+                                          "  ,uri TEXT NOT NULL" "\n" \
+                                          ");" "\n" \
+                                          "CREATE UNIQUE INDEX c_uris_index ON c_uris (uri);" "\n" \
+                                          "INSERT INTO so_uris (id, uri) VALUES (0,'');" "\n" \
+                                          "INSERT INTO so_blanks (id, blank) VALUES (0,'');" "\n" \
+                                          "INSERT INTO c_uris (id, uri) VALUES (0,'');" "\n" \
+                                          "INSERT INTO t_uris (id, uri) VALUES (0,'');" "\n" \
+                                          "CREATE TABLE spocs (" "\n" \
+                                          "  s_uri INTEGER NOT NULL    REFERENCES so_uris (id)" "\n" \
+                                          "  ,s_blank INTEGER NOT NULL REFERENCES so_blanks (id)" "\n" \
+                                          "  ,p_uri INTEGER NOT NULL   REFERENCES p_uris (id)" "\n" \
+                                          "  ,o_uri INTEGER NOT NULL   REFERENCES so_uris (id)" "\n" \
+                                          "  ,o_blank INTEGER NOT NULL REFERENCES so_blanks (id)" "\n" \
+                                          "  ,o_lit INTEGER NOT NULL   REFERENCES o_literals (id)" "\n" \
+                                          "  ,c_uri INTEGER NOT NULL   REFERENCES c_uris (id)" "\n" \
+                                          ");" "\n" \
+                                          "CREATE UNIQUE INDEX spocs_index ON spocs (s_uri,s_blank,p_uri,o_uri,o_blank,o_lit,c_uri);" "\n" \
+                                          "CREATE VIEW spocs_full AS" "\n" \
+                                          "SELECT" "\n" \
+                                          "  -- the ids:" "\n" \
+                                          "  s_uris.id       AS s_uri_id" "\n" \
+                                          "  ,s_blanks.id     AS s_blank_id" "\n" \
+                                          "  ,p_uris.id       AS p_uri_id" "\n" \
+                                          "  ,o_uris.id       AS o_uri_id" "\n" \
+                                          "  ,o_blanks.id     AS o_blank_id" "\n" \
+                                          "  ,o_literals.id   AS o_lit_id" "\n" \
+                                          "  ,o_lit_uris.id   AS o_datatype_id" "\n" \
+                                          "  ,c_uris.id       AS c_uri_id" "\n" \
+                                          "  -- the values:" "\n" \
+                                          "  ,s_uris.uri      AS s_uri" "\n" \
+                                          "  ,s_blanks.blank  AS s_blank" "\n" \
+                                          "  ,p_uris.uri      AS p_uri" "\n" \
+                                          "  ,o_uris.uri      AS o_uri" "\n" \
+                                          "  ,o_blanks.blank  AS o_blank" "\n" \
+                                          "  ,o_literals.text AS o_text" "\n" \
+                                          "  ,o_literals.language AS o_language" "\n" \
+                                          "  ,o_lit_uris.uri  AS o_datatype" "\n" \
+                                          "  ,c_uris.uri      AS c_uri" "\n" \
+                                          "FROM spocs" "\n" \
+                                          "INNER JOIN so_uris    AS s_uris     ON spocs.s_uri      = s_uris.id" "\n" \
+                                          "INNER JOIN so_blanks  AS s_blanks   ON spocs.s_blank    = s_blanks.id" "\n" \
+                                          "INNER JOIN p_uris     AS p_uris     ON spocs.p_uri      = p_uris.id" "\n" \
+                                          "INNER JOIN so_uris    AS o_uris     ON spocs.o_uri      = o_uris.id" "\n" \
+                                          "INNER JOIN so_blanks  AS o_blanks   ON spocs.o_blank    = o_blanks.id" "\n" \
+                                          "LEFT OUTER JOIN o_literals AS o_literals ON spocs.o_lit = o_literals.id" "\n" \
+                                          "LEFT OUTER JOIN t_uris     AS o_lit_uris ON o_literals.datatype   = o_lit_uris.id" "\n" \
+                                          "INNER JOIN c_uris     AS c_uris     ON spocs.c_uri      = c_uris.id" "\n" \
+                                          ";" "\n" \
+                                          "PRAGMA user_version=1;" "\n" \
+        ;
+
+        const char *const migrations[] = {
+            schema_mig_to_1_sql,
+            NULL
+        };
+        {
+            const size_t mig_count = sizeof(migrations) / sizeof(migrations[0]) - 1;
+            assert(!migrations[mig_count] && "migrations must be NULL terminated.");
+            if( schema_version > mig_count ) {
+                // schema is more recent than this source file knows to handle.
+                pub_close(storage);
+                return RET_ERROR;
+            }
+        }
+        const sqlite_rc_t begin = transaction_start(storage);
+        for( int v = schema_version; migrations[v]; v++ ) {
+            if( SQLITE_OK != exec_stmt(db_ctx->db, migrations[v]) ) {
+                transaction_rollback(storage, begin);
+                pub_close(storage);
+                return RET_ERROR;
+            }
+            {
+                // assert new schema version
+                sqlite3_stmt *stmt = NULL;
+                prep_stmt(db_ctx->db, &stmt, "PRAGMA user_version");
+                if( sqlite3_step(stmt) != SQLITE_ROW ) {
+                    sqlite3_finalize(stmt);
+                    pub_close(storage);
+                    return RET_ERROR;
+                }
+                const int v_new = sqlite3_column_int(stmt, 0);
+                if( sqlite3_step(stmt) != SQLITE_DONE ) {
+                    sqlite3_finalize(stmt);
+                    pub_close(storage);
+                    return RET_ERROR;
+                }
+                sqlite3_finalize(stmt);
+                assert(v_new == v + 1 && "invalid schema version after migration.");
+            }
+        }
+        if( SQLITE_OK != transaction_commit(storage, begin) ) {
+            pub_close(storage);
+            return RET_ERROR;
+        }
     }
     return RET_OK;
 }
@@ -1169,7 +1247,7 @@ static int pub_size(librdf_storage *storage)
 
     sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(rowid) FROM " TABLE_TRIPLES_NAME);
     const sqlite_rc_t rc = sqlite3_step(stmt);
-    if( rc == SQLITE_ROW ) {
+    if( SQLITE_ROW == rc ) {
         const id_t ret = (id_t)sqlite3_column_int64(stmt, 0);
         transaction_rollback(storage, begin);
         return ret;
@@ -1271,6 +1349,10 @@ static librdf_stream *pub_serialise(librdf_storage *storage)
 
 static int pub_context_add_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement)
 {
+    if( !storage )
+        return RET_ERROR;
+    if( !statement )
+        return RET_OK;
     // librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
     return NULL == find_statement(storage, context_node, statement, BOOL_YES) ? RET_ERROR : RET_OK;
 }
@@ -1307,8 +1389,14 @@ static int pub_add_statements(librdf_storage *storage, librdf_stream *statement_
 
 static int pub_context_remove_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement)
 {
-    assert(0 && "not implemented yet.");
+    if( !statement )
+        return RET_OK;
     return RET_ERROR;
+    const sqlite_rc_t txn = transaction_start(storage);
+    /*
+     * DELETE spocs
+     */
+    return transaction_commit(storage, txn);
 }
 
 
@@ -1318,11 +1406,22 @@ static int pub_remove_statement(librdf_storage *storage, librdf_statement *state
 }
 
 
+#if 0
 static int pub_context_remove_statements(librdf_storage *storage, librdf_node *context_node)
 {
-    assert(0 && "not implemented yet.");
-    return RET_ERROR;
+    const sqlite_rc_t txn = transaction_start(storage);
+    for( librdf_statement *stmt = librdf_stream_get_object(statement_stream); !librdf_stream_end(statement_stream); librdf_stream_next(statement_stream) ) {
+        const int rc = pub_context_remove_statement(storage, context_node, stmt);
+        if( RET_OK != rc ) {
+            transaction_rollback(storage, txn);
+            return rc;
+        }
+    }
+    return transaction_commit(storage, txn);
 }
+
+
+#endif
 
 
 #pragma mark Register Storage Factory
@@ -1347,7 +1446,7 @@ static void register_factory(librdf_storage_factory *factory)
     factory->context_add_statement      = pub_context_add_statement;
     factory->context_add_statements     = pub_context_add_statements;
     factory->context_remove_statement   = pub_context_remove_statement;
-    factory->context_remove_statements  = pub_context_remove_statements;
+    // factory->context_remove_statements  = pub_context_remove_statements; is this a 'clear' ?
     factory->context_serialise          = pub_context_serialise;
     factory->find_statements_in_context = pub_context_find_statements;
     factory->get_contexts               = pub_get_contexts;
