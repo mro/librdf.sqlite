@@ -19,25 +19,24 @@
 -- DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
 -- IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 -- THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
---
+-- 
 
--- find triple parts (nodes)
-
-SELECT :part_s_u AS part, :t_uri AS node_type, id FROM so_uris WHERE (:s_type = :t_uri) AND uri = :s_uri
-UNION
-SELECT :part_s_b AS part, :t_blank AS node_type, id FROM so_blanks WHERE (:s_type = :t_blank) AND blank = :s_blank
-UNION
-SELECT :part_p_u AS part, :t_uri AS node_type, id FROM p_uris WHERE (:p_type = :t_uri) AND uri = :p_uri
-UNION
-SELECT :part_o_u AS part, :t_uri AS node_type, id FROM so_uris WHERE (:o_type = :t_uri) AND uri = :o_uri
-UNION
-SELECT :part_o_b AS part, :t_blank AS node_type, id FROM so_blanks WHERE (:o_type = :t_blank) AND blank = :o_blank
-UNION
-SELECT :part_o_l AS part, :t_literal AS node_type, o_literals.id FROM o_literals
-INNER JOIN t_uris ON o_literals.datatype = t_uris.id
-WHERE (:o_type = :t_literal) AND (text = :o_text AND language = :o_language AND t_uris.uri = :o_datatype)
-UNION
-SELECT :part_datatype AS part, :t_uri AS node_type, id FROM t_uris WHERE (:o_type = :t_literal) AND uri = :o_datatype
-UNION
-SELECT :part_c AS part, :t_uri AS node_type, id FROM c_uris WHERE uri = :c_uri
-ORDER BY part DESC, node_type ASC
+INSERT OR IGNORE INTO triples(
+  id,
+  s_uri_id, s_uri,
+  s_blank_id, s_blank,
+  p_uri_id, p_uri,
+  o_uri_id, o_uri,
+  o_blank_id, o_blank,
+  o_lit_id, o_datatype_id, o_datatype, o_language, o_text,
+  c_uri_id, c_uri
+) VALUES (
+  :stmt_id,
+  :s_uri_id, :s_uri,
+  :s_blank_id, :s_blank,
+  :p_uri_id, :p_uri,
+  :o_uri_id, :o_uri,
+  :o_blank_id, :o_blank,
+  :o_lit_id, :o_datatype_id, :o_datatype, :o_language, :o_text,
+  :c_uri_id, :c_uri
+)

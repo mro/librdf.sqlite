@@ -45,9 +45,9 @@ typedef enum {
     BOOL_YES = 1
 } boolean_t;
 
-typedef uint32_t id_t;
-static const id_t NULL_ID = 0;
-static inline boolean_t isNULL_ID(const id_t x)
+typedef sqlite3_uint64 hash_t;
+static const hash_t NULL_ID = 0;
+static inline boolean_t isNULL_ID(const hash_t x)
 {
     return x == 0;
 }
@@ -97,6 +97,7 @@ struct legacy_query_t
 typedef struct
 {
     sqlite3 *db;
+    librdf_digest *digest;
 
     const char *name;
     size_t name_len;
@@ -111,18 +112,10 @@ typedef struct
     sqlite3_stmt *stmt_txn_start;
     sqlite3_stmt *stmt_txn_commit;
     sqlite3_stmt *stmt_txn_rollback;
-    sqlite3_stmt *stmt_uri_so_set;
-    sqlite3_stmt *stmt_uri_p_set;
-    sqlite3_stmt *stmt_uri_t_set;
-    sqlite3_stmt *stmt_uri_c_set;
-    sqlite3_stmt *stmt_literal_set;
-    sqlite3_stmt *stmt_blank_so_set;
-    sqlite3_stmt *stmt_parts_get;
-    sqlite3_stmt *stmt_spocs_get;
-    sqlite3_stmt *stmt_spocs_set;
+    sqlite3_stmt *stmt_triple_find;
+    sqlite3_stmt *stmt_triple_insert;
 
     sqlite3_stmt *stmt_size;
-    sqlite3_stmt *stmt_find;
 }
 instance_t;
 
@@ -166,6 +159,100 @@ static inline librdf_node_type node_type(librdf_node *node)
 static inline librdf_uri *node_uri(librdf_node *node)
 {
     return node == NULL ? NULL : librdf_node_get_uri(node);
+}
+
+
+static hash_t digest_hash(librdf_digest *digest)
+{
+    assert(digest && "must be set");
+    librdf_digest_final(digest);
+    int8_t *diges = (int8_t *)librdf_digest_get_digest(digest);
+    hash_t hash = 0;
+    for( int i = 0; i < 8; i++ )
+        hash += ( (hash_t)diges[i] ) << (i * 8);
+    assert(!isNULL_ID(hash) && "null hash");
+    return hash;
+}
+
+
+static hash_t uri_hash(librdf_uri *uri, librdf_digest *digest)
+{
+    if( !uri )
+        return NULL_ID;
+    assert(digest && "digest must be set.");
+    size_t len = 0;
+    unsigned char *s = librdf_uri_as_counted_string(uri, &len);
+    assert(s && "uri NULL");
+    assert(len && "uri length 0");
+    librdf_digest_init(digest);
+    librdf_digest_update(digest, s, len);
+    return digest_hash(digest);
+}
+
+
+static hash_t node_hash_uri(librdf_node *node, librdf_digest *digest)
+{
+    return uri_hash(LIBRDF_NODE_TYPE_RESOURCE == node_type(node) ? librdf_node_get_uri(node) : NULL, digest);
+}
+
+
+static hash_t node_hash_blank(librdf_node *node, librdf_digest *digest)
+{
+    if( LIBRDF_NODE_TYPE_BLANK != node_type(node) )
+        return NULL_ID;
+    assert(digest && "digest must be set.");
+    size_t len = 0;
+    unsigned char *b = librdf_node_get_counted_blank_identifier(node, &len);
+    assert(b && "blank NULL");
+    assert(len && "blank len 0");
+    librdf_digest_init(digest);
+    librdf_digest_update(digest, b, len);
+    return digest_hash(digest);
+}
+
+
+static hash_t node_hash_literal(librdf_node *node, librdf_digest *digest)
+{
+    if( LIBRDF_NODE_TYPE_LITERAL != node_type(node) )
+        return NULL_ID;
+    assert(digest && "digest must be set.");
+    librdf_digest_init(digest);
+    size_t len = 0;
+    unsigned char *s = librdf_node_get_literal_value_as_counted_string(node, &len);
+    assert(s && "literal without value");
+    librdf_digest_update(digest, s, len);
+
+    librdf_uri *uri = librdf_node_get_literal_value_datatype_uri(node);
+    if( uri )
+        librdf_digest_update(digest, librdf_uri_as_counted_string(uri, &len), len);
+
+    s = (unsigned char *)librdf_node_get_literal_value_language(node);
+    if( s )
+        librdf_digest_update(digest, s, len);
+    return digest_hash(digest);
+}
+
+
+static hash_t stmt_hash(librdf_statement *stmt, librdf_node *context_node, librdf_digest *digest)
+{
+    if( !stmt )
+        return NULL_ID;
+
+    librdf_node *s = librdf_statement_get_subject(stmt);
+    librdf_node *p = librdf_statement_get_predicate(stmt);
+    librdf_node *o = librdf_statement_get_object(stmt);
+
+    hash_t stmt_id = NULL_ID;
+    stmt_id ^= node_hash_uri(s, digest);
+    stmt_id ^= node_hash_blank(s, digest);
+    stmt_id ^= node_hash_uri(p, digest);
+    stmt_id ^= node_hash_uri(o, digest);
+    stmt_id ^= node_hash_blank(o, digest);
+    stmt_id ^= node_hash_literal(o, digest);
+    // stmt_id ^= uri_hash(librdf_node_get_literal_value_datatype_uri(o), digest);
+    stmt_id ^= node_hash_uri(context_node, digest);
+
+    return stmt_id;
 }
 
 
@@ -226,7 +313,7 @@ typedef int sqlite_rc_t;
 
 static sqlite_rc_t log_error(sqlite3 *db, const char *sql, const sqlite_rc_t rc)
 {
-    if( rc != SQLITE_OK ) {
+    if( SQLITE_OK != rc ) {
         const char *errmsg = sqlite3_errmsg(db);
         librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "SQLite SQL error - %s (%d)\n%s", errmsg, rc, sql);
     }
@@ -242,12 +329,14 @@ static sqlite3_stmt *prep_stmt(sqlite3 *db, sqlite3_stmt **stmt_p, const char *z
     if( *stmt_p ) {
         assert(0 == strcmp(sqlite3_sql(*stmt_p), zSql) && "ouch");
         const sqlite_rc_t rc0 = sqlite3_reset(*stmt_p);
-        assert(rc0 == SQLITE_OK && "couldn't reset SQL statement");
+        assert(SQLITE_OK == rc0 && "couldn't reset SQL statement");
+        const sqlite_rc_t rc1 = sqlite3_clear_bindings(*stmt_p);
+        assert(SQLITE_OK == rc1 && "couldn't reset SQL statement");
     } else {
         const char *remainder = NULL;
         const int len_zSql = (int)strlen(zSql) + 1;
         const sqlite_rc_t rc0 = log_error( db, zSql, sqlite3_prepare_v2(db, zSql, len_zSql, stmt_p, &remainder) );
-        assert(rc0 == SQLITE_OK && "couldn't compile SQL statement");
+        assert(SQLITE_OK == rc0 && "couldn't compile SQL statement");
         assert(*remainder == '\0' && "had remainder");
     }
     assert(*stmt_p && "statement is NULL");
@@ -275,7 +364,7 @@ static sqlite_rc_t exec_stmt(sqlite3 *db, const char *sql)
 }
 
 
-static inline sqlite_rc_t bind_int(sqlite3_stmt *stmt, const char *name, const id_t _id)
+static inline sqlite_rc_t bind_int(sqlite3_stmt *stmt, const char *name, const hash_t _id)
 {
     assert(stmt && "stmt mandatory");
     assert(name && "name mandatory");
@@ -299,11 +388,73 @@ static inline sqlite_rc_t bind_null(sqlite3_stmt *stmt, const char *name)
 }
 
 
-static inline sqlite_rc_t bind_uri(sqlite3_stmt *stmt, const char *name, librdf_uri *uri)
+static sqlite_rc_t bind_uri_id(sqlite3_stmt *stmt, librdf_digest *digest, const char *name, librdf_uri *uri, hash_t *value)
 {
-    size_t len = 0;
-    return bind_text(stmt, name, uri == NULL ? NULL_URI : librdf_uri_as_counted_string(uri, &len), len);
+    if( uri ) {
+        const hash_t v = uri_hash(uri, digest);
+        if( value ) *value = v;
+        return bind_int(stmt, name, v);
+    }
+    return bind_null(stmt, name);
 }
+
+
+static sqlite_rc_t bind_uri(sqlite3_stmt *stmt, const char *name, librdf_uri *uri)
+{
+    if( uri ) {
+        size_t len = 0;
+        return bind_text(stmt, name, librdf_uri_as_counted_string(uri, &len), len);
+    }
+    return bind_null(stmt, name);
+}
+
+
+static sqlite_rc_t bind_node_uri_id(sqlite3_stmt *stmt, librdf_digest *digest, const char *name, librdf_node *node, hash_t *value)
+{
+    return bind_uri_id(stmt, digest, name, LIBRDF_NODE_TYPE_RESOURCE == node_type(node) ? librdf_node_get_uri(node) : NULL, value);
+}
+
+
+static sqlite_rc_t bind_node_uri(sqlite3_stmt *stmt, const char *name, librdf_node *node)
+{
+    return bind_uri(stmt, name, LIBRDF_NODE_TYPE_RESOURCE == node_type(node) ? librdf_node_get_uri(node) : NULL);
+}
+
+
+static sqlite_rc_t bind_node_blank_id(sqlite3_stmt *stmt, librdf_digest *digest, const char *name, librdf_node *node, hash_t *value)
+{
+    if( LIBRDF_NODE_TYPE_BLANK == node_type(node) ) {
+        const hash_t v = node_hash_blank(node, digest);
+        if( value ) *value = v;
+        return bind_int(stmt, name, v);
+    }
+    return bind_null(stmt, name);
+}
+
+
+static sqlite_rc_t bind_node_blank(sqlite3_stmt *stmt, const char *name, librdf_node *node)
+{
+    if( LIBRDF_NODE_TYPE_BLANK == node_type(node) ) {
+        size_t len = 0;
+        return bind_text(stmt, name, librdf_node_get_counted_blank_identifier(node, &len), len);
+    }
+    return bind_null(stmt, name);
+}
+
+
+static sqlite_rc_t bind_node_lit_id(sqlite3_stmt *stmt, librdf_digest *digest, const char *name, librdf_node *node, hash_t *value)
+{
+    if( LIBRDF_NODE_TYPE_LITERAL == node_type(node) ) {
+        const hash_t v = node_hash_literal(node, digest);
+        if( value ) *value = v;
+        return bind_int(stmt, name, v);
+    }
+    return bind_null(stmt, name);
+}
+
+
+// static sqlite_rc_t bind_text(sqlite3_stmt* stmt, const char*name, librdf_node*node){return SQLITE_ERROR;}
+
 
 
 static inline const str_uri_t column_uri_string(sqlite3_stmt *stmt, const int iCol)
@@ -327,14 +478,14 @@ static inline const str_lang_t column_language(sqlite3_stmt *stmt, const int iCo
 }
 
 
-static id_t insert(sqlite3 *db, sqlite3_stmt *stmt)
+static hash_t insert(sqlite3 *db, sqlite3_stmt *stmt)
 {
     const sqlite_rc_t rc3 = sqlite3_step(stmt);
     if( SQLITE_DONE == rc3 ) {
         const sqlite3_int64 r = sqlite3_last_insert_rowid(db);
         const sqlite_rc_t rc2 = sqlite3_reset(stmt);
         assert(rc2 == SQLITE_OK && "ouch");
-        return (id_t)r;
+        return (hash_t)r;
     }
     return -rc3;
 }
@@ -447,109 +598,6 @@ static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *reque
 #pragma mark Internal Implementation
 
 
-#define TABLE_URIS_SO_NAME "so_uris"
-#define TABLE_URIS_P_NAME "p_uris"
-#define TABLE_URIS_T_NAME "t_uris"
-#define TABLE_URIS_C_NAME "c_uris"
-#define TABLE_BLANKS_SO_NAME "so_blanks"
-#define TABLE_LITERALS_NAME "o_literals"
-#define TABLE_TRIPLES_NAME "spocs"
-
-
-static id_t create_uri(instance_t *db_ctx, librdf_uri *uri, sqlite3_stmt *stmt)
-{
-    if( !uri )
-        return NULL_ID;
-    assert(stmt && "Statement is null");
-    size_t len = 0;
-    const str_uri_t txt = (const str_uri_t)librdf_uri_as_counted_string(uri, &len);
-    const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, (const char *)txt, (int)len, SQLITE_STATIC);
-    assert(rc0 == SQLITE_OK && "bind fail");
-    return insert(db_ctx->db, stmt);
-}
-
-
-static inline id_t create_uri_so(instance_t *db_ctx, librdf_node *node)
-{
-    if( !node || !librdf_node_is_resource(node) )
-        return NULL_ID;
-    return create_uri( db_ctx, node_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_so_set), "INSERT INTO " TABLE_URIS_SO_NAME " (uri) VALUES (?)") );
-}
-
-
-static inline id_t create_uri_p(instance_t *db_ctx, librdf_node *node)
-{
-    if( !node || !librdf_node_is_resource(node) )
-        return NULL_ID;
-    return create_uri( db_ctx, node_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_p_set), "INSERT INTO " TABLE_URIS_P_NAME " (uri) VALUES (?)") );
-}
-
-
-static inline id_t create_uri_c(instance_t *db_ctx, librdf_node *node)
-{
-    if( !node || !librdf_node_is_resource(node) )
-        return NULL_ID;
-    return create_uri( db_ctx, node_uri(node), prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_c_set), "INSERT INTO " TABLE_URIS_C_NAME " (uri) VALUES (?)") );
-}
-
-
-static inline id_t create_uri_t(instance_t *db_ctx, librdf_node *node)
-{
-    if( !node || !librdf_node_is_literal(node) )
-        return NULL_ID;
-    librdf_uri *uri = librdf_node_get_literal_value_datatype_uri(node);
-    if( !uri )
-        return NULL_ID;
-    return create_uri( db_ctx, uri, prep_stmt(db_ctx->db, &(db_ctx->stmt_uri_t_set), "INSERT INTO " TABLE_URIS_T_NAME " (uri) VALUES (?)") );
-}
-
-
-static id_t create_blank(instance_t *db_ctx, librdf_node *node, sqlite3_stmt *stmt)
-{
-    if( !node || !librdf_node_is_blank(node) )
-        return NULL_ID;
-    size_t len = 0;
-    str_blank_t val = librdf_node_get_counted_blank_identifier(node, &len);
-    if( val == NULL )
-        return NULL_ID;
-    const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, (const char *)val, (int)len, SQLITE_STATIC);
-    assert(rc0 == SQLITE_OK && "bind fail");
-    return insert(db_ctx->db, stmt);
-}
-
-
-static inline id_t create_blank_so(instance_t *db_ctx, librdf_node *node)
-{
-    return create_blank( db_ctx, node, prep_stmt(db_ctx->db, &(db_ctx->stmt_blank_so_set), "INSERT INTO " TABLE_BLANKS_SO_NAME " (blank) VALUES (?)") );
-}
-
-
-static id_t create_literal(instance_t *db_ctx, librdf_node *node, const id_t datatype_id, sqlite3_stmt *stmt)
-{
-    if( !node || !librdf_node_is_literal(node) )
-        return NULL_ID;
-    // void * p = librdf_node_get_literal_value_datatype_uri(node);
-    size_t len = 0;
-    str_lit_val_t txt = librdf_node_get_literal_value_as_counted_string(node, &len);
-    str_lang_t language = librdf_node_get_literal_value_language(node);
-    if( language == NULL )
-        language = NULL_LANG;
-    const sqlite_rc_t rc0 = sqlite3_bind_text(stmt, 1, (const char *)txt, (int)len, SQLITE_STATIC);
-    assert(rc0 == SQLITE_OK && "bind fail");
-    const sqlite_rc_t rc1 = sqlite3_bind_int64(stmt, 2, datatype_id);
-    assert(rc1 == SQLITE_OK && "bind fail");
-    const sqlite_rc_t rc2 = sqlite3_bind_text(stmt, 3, language, -1, SQLITE_STATIC);
-    assert(rc2 == SQLITE_OK && "bind fail");
-    return insert(db_ctx->db, stmt);
-}
-
-
-static inline id_t create_literal_o(instance_t *db_ctx, librdf_node *node, const id_t datatype_id)
-{
-    return create_literal( db_ctx, node, datatype_id, prep_stmt(db_ctx->db, &(db_ctx->stmt_literal_set), "INSERT INTO " TABLE_LITERALS_NAME " (text,datatype,language) VALUES (?,?,?)") );
-}
-
-
 /** Must match input parameter slots (until PART_C) of lookup_triple_sql and insert_triple_sql
  */
 typedef enum {
@@ -566,202 +614,95 @@ typedef enum {
 part_t;
 
 
-static sqlite_rc_t bind_stmt(sqlite3_stmt *stmt, librdf_node *context_node, librdf_statement *statement)
-{
-    sqlite_rc_t rc = SQLITE_OK;
-    size_t len = 0;
-    librdf_node_type t = LIBRDF_NODE_TYPE_UNKNOWN;
-    part_t i = PART_S_U;
-    // add some constants for reporting results back
-    // node type markers
-    rc = bind_int(stmt, ":t_uri", t = LIBRDF_NODE_TYPE_RESOURCE);
-    rc = bind_int(stmt, ":t_blank", t = LIBRDF_NODE_TYPE_BLANK);
-    rc = bind_int(stmt, ":t_literal", t = LIBRDF_NODE_TYPE_LITERAL);
-    rc = bind_int(stmt, ":t_none", t = LIBRDF_NODE_TYPE_UNKNOWN);
-    // triple part markers
-    rc = bind_int(stmt, ":part_s_u", i = PART_S_U);
-    rc = bind_int(stmt, ":part_s_b", i = PART_S_B);
-    rc = bind_int(stmt, ":part_p_u", i = PART_P_U);
-    rc = bind_int(stmt, ":part_o_u", i = PART_O_U);
-    rc = bind_int(stmt, ":part_o_b", i = PART_O_B);
-    rc = bind_int(stmt, ":part_o_l", i = PART_O_L);
-    rc = bind_int(stmt, ":part_c", i = PART_C);
-    rc = bind_int(stmt, ":part_datatype", i = PART_DATATYPE);
-    rc = bind_int(stmt, ":part_triple", i = PART_TRIPLE);
-
-    librdf_node *s = librdf_statement_get_subject(statement);
-    t = node_type(s);
-    rc = bind_int(stmt, ":s_type", t);
-    if( t == LIBRDF_NODE_TYPE_UNKNOWN ) {
-        rc = bind_null(stmt, ":s_uri");
-        rc = bind_null(stmt, ":s_blank");
-    } else {
-        rc = bind_uri( stmt, ":s_uri", node_uri(s) );
-        rc = bind_text(stmt, ":s_blank", librdf_node_get_counted_blank_identifier(s, &len), len);
-    }
-
-    librdf_node *p = librdf_statement_get_predicate(statement);
-    t = node_type(p);
-    rc = bind_int(stmt, ":p_type", t);
-    if( t == LIBRDF_NODE_TYPE_UNKNOWN )
-        rc = bind_null(stmt, ":p_uri");
-    else
-        rc = bind_uri( stmt, ":p_uri", node_uri(p) );
-
-    librdf_node *o = librdf_statement_get_object(statement);
-    t = node_type(o);
-    rc = bind_int(stmt, ":o_type", t);
-    if( t == LIBRDF_NODE_TYPE_UNKNOWN ) {
-        rc = bind_null(stmt, ":o_uri");
-        rc = bind_null(stmt, ":o_blank");
-        rc = bind_null(stmt, ":o_text");
-        rc = bind_null(stmt, ":o_datatype");
-        rc = bind_null(stmt, ":o_language");
-    } else {
-        rc = bind_uri( stmt, ":o_uri", node_uri(o) );
-        rc = bind_text(stmt, ":o_blank", librdf_node_get_counted_blank_identifier(o, &len), len);
-        rc = bind_text(stmt, ":o_text", librdf_node_get_literal_value_as_counted_string(o, &len), len);
-        rc = bind_uri( stmt, ":o_datatype", librdf_node_get_literal_value_datatype_uri(o) );
-        str_lang_t language = librdf_node_get_literal_value_language(o);
-        rc = bind_text(stmt, ":o_language", (const unsigned char *)(language ? language : NULL_LANG), -1);
-    }
-
-    rc = bind_int(stmt, ":c_wild", context_node == NULL);
-    rc = bind_uri( stmt, ":c_uri", node_uri(context_node) );
-
-    return SQLITE_OK;
-}
-
-
-static id_t create_part(instance_t *inst, librdf_node *node, const part_t part, id_t ids[])
-{
-    if( !node || !isNULL_ID(ids[part]) )
-        return ids[part];
-    switch( part ) {
-    case PART_S_U:
-        return create_uri_so(inst, node);
-    case PART_S_B:
-        return create_blank_so(inst, node);
-    case PART_P_U:
-        return create_uri_p(inst, node);
-    case PART_O_U:
-        return create_uri_so(inst, node);
-    case PART_O_B:
-        return create_blank_so(inst, node);
-    case PART_O_L:
-        return create_literal_o(inst, node, ids[PART_DATATYPE]);
-    case PART_DATATYPE:
-        return create_uri_t(inst, node);
-    case PART_C:
-        return create_uri_c(inst, node);
-    case PART_TRIPLE:
-        break;
-    }
-    assert(0 && "Fallthrough");
-    return NULL_ID;
-}
-
 
 static librdf_statement *find_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement, boolean_t create)
 {
-    const sqlite_rc_t begin = transaction_start(storage);
+    assert(statement && "statement must be set.");
+
     instance_t *db_ctx = get_instance(storage);
 
-    // const id_t size = pub_size(storage);
-
-    // find already existing parts
-    id_t part_ids[PART_TRIPLE + 1] = {
-        NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID, NULL_ID
-    };
-    {
-        const char *find_parts_sql = // generated via tools/sql2c.sh find_parts.sql
-                                     "SELECT :part_s_u AS part, :t_uri AS node_type, id FROM so_uris WHERE (:s_type = :t_uri) AND uri = :s_uri" "\n" \
-                                     "UNION" "\n" \
-                                     "SELECT :part_s_b AS part, :t_blank AS node_type, id FROM so_blanks WHERE (:s_type = :t_blank) AND blank = :s_blank" "\n" \
-                                     "UNION" "\n" \
-                                     "SELECT :part_p_u AS part, :t_uri AS node_type, id FROM p_uris WHERE (:p_type = :t_uri) AND uri = :p_uri" "\n" \
-                                     "UNION" "\n" \
-                                     "SELECT :part_o_u AS part, :t_uri AS node_type, id FROM so_uris WHERE (:o_type = :t_uri) AND uri = :o_uri" "\n" \
-                                     "UNION" "\n" \
-                                     "SELECT :part_o_b AS part, :t_blank AS node_type, id FROM so_blanks WHERE (:o_type = :t_blank) AND blank = :o_blank" "\n" \
-                                     "UNION" "\n" \
-                                     "SELECT :part_o_l AS part, :t_literal AS node_type, o_literals.id FROM o_literals" "\n" \
-                                     "INNER JOIN t_uris ON o_literals.datatype = t_uris.id" "\n" \
-                                     "WHERE (:o_type = :t_literal) AND (text = :o_text AND language = :o_language AND t_uris.uri = :o_datatype)" "\n" \
-                                     "UNION" "\n" \
-                                     "SELECT :part_datatype AS part, :t_uri AS node_type, id FROM t_uris WHERE (:o_type = :t_literal) AND uri = :o_datatype" "\n" \
-                                     "UNION" "\n" \
-                                     "SELECT :part_c AS part, :t_uri AS node_type, id FROM c_uris WHERE uri = :c_uri" "\n" \
-                                     "ORDER BY part DESC, node_type ASC" "\n" \
-        ;
-        sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_parts_get), find_parts_sql);
-        const sqlite_rc_t rc3 = bind_stmt(stmt, context_node, statement);
-        for( sqlite_rc_t rc = sqlite3_step(stmt); SQLITE_ROW == rc; rc = sqlite3_step(stmt) ) {
-            switch( rc ) {
-            case SQLITE_ROW: {
-                const part_t idx = (part_t)sqlite3_column_int(stmt, 0);
-                // const triple_node_type type = (triple_node_type)sqlite3_column_int(stmt, 1);
-                part_ids[idx] = (id_t)sqlite3_column_int64(stmt, 2);
-                break;
-            }
-            default:
-                transaction_rollback(storage, begin);
-                return NULL;
-            }
-        }
-    }
-    // create missing parts
-    if( create ) {
-        librdf_node *s = librdf_statement_get_subject(statement);
-        librdf_node *p = librdf_statement_get_predicate(statement);
-        librdf_node *o = librdf_statement_get_object(statement);
-        part_ids[PART_S_U]  = create_part(db_ctx, s, PART_S_U, part_ids);
-        part_ids[PART_S_B]  = create_part(db_ctx, s, PART_S_B, part_ids);
-        part_ids[PART_P_U]  = create_part(db_ctx, p, PART_P_U, part_ids);
-        part_ids[PART_O_U]  = create_part(db_ctx, o, PART_O_U, part_ids);
-        part_ids[PART_O_B]  = create_part(db_ctx, o, PART_O_B, part_ids);
-        part_ids[PART_DATATYPE] = create_part(db_ctx, o, PART_DATATYPE, part_ids);
-        part_ids[PART_O_L]  = create_part(db_ctx, o, PART_O_L, part_ids);
-        part_ids[PART_C]    = create_part(db_ctx, context_node, PART_C, part_ids);
-    }
-    {
-        // check if we have such a triple (spocs)
-        const char *lookup_triple_sql = "SELECT rowid FROM " TABLE_TRIPLES_NAME "\n" \
-                                        "WHERE s_uri=? AND s_blank=? AND p_uri=? AND o_uri=? AND o_blank=? AND o_lit=? AND c_uri=?";
-        sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_spocs_get), lookup_triple_sql);
-        for( int i = PART_C; i >= PART_S_U; i-- ) {
-            const sqlite_rc_t rc_ = sqlite3_bind_int64(stmt, i + 1, part_ids[i]);
-            assert(rc_ == SQLITE_OK && "ouch");
-        }
-        const sqlite_rc_t rc = sqlite3_step(stmt);
-        if( SQLITE_ROW == rc ) {
-            transaction_rollback(storage, begin);
-            return statement;
-        }
-    }
     if( !create ) {
-        transaction_rollback(storage, begin);
-        return NULL;
+        const hash_t stmt_id = stmt_hash(statement, context_node, db_ctx->digest);
+        const char *select_triple_sql = "SELECT id FROM triple_relations WHERE id = :stmt_id";
+        sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_find), select_triple_sql);
+
+        if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) ) return NULL;
+        return SQLITE_ROW == sqlite3_step(stmt) ? statement : NULL;
     }
-    {
-        // create the triple
-        const char *insert_triple_sql = "INSERT INTO " TABLE_TRIPLES_NAME "\n" \
-                                        "(s_uri,s_blank,p_uri,o_uri,o_blank,o_lit,c_uri) VALUES" "\n" \
-                                        "(  ?  ,   ?   ,  ?  ,  ?  ,   ?   ,  ?  ,  ?  )";
-        sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_spocs_set), insert_triple_sql);
-        for( int i = PART_C; i >= PART_S_U; i-- ) {
-            const sqlite_rc_t rc = sqlite3_bind_int64(stmt, i + 1, part_ids[i]);
-            assert(rc == SQLITE_OK && "ouch");
-        }
-        const sqlite_rc_t rc = sqlite3_step(stmt);
-        if( SQLITE_DONE == rc ) {
-            // assert(size + 1 == pub_size(storage) && "hu?");
-            transaction_commit(storage, begin);
-            return statement;
-        }
+    const char *insert_triple_sql = // generated via tools/sql2c.sh insert_triple.sql
+                                    "INSERT OR IGNORE INTO triples(" "\n" \
+                                    "  id," "\n" \
+                                    "  s_uri_id, s_uri," "\n" \
+                                    "  s_blank_id, s_blank," "\n" \
+                                    "  p_uri_id, p_uri," "\n" \
+                                    "  o_uri_id, o_uri," "\n" \
+                                    "  o_blank_id, o_blank," "\n" \
+                                    "  o_lit_id, o_datatype_id, o_datatype, o_language, o_text," "\n" \
+                                    "  c_uri_id, c_uri" "\n" \
+                                    ") VALUES (" "\n" \
+                                    "  :stmt_id," "\n" \
+                                    "  :s_uri_id, :s_uri," "\n" \
+                                    "  :s_blank_id, :s_blank," "\n" \
+                                    "  :p_uri_id, :p_uri," "\n" \
+                                    "  :o_uri_id, :o_uri," "\n" \
+                                    "  :o_blank_id, :o_blank," "\n" \
+                                    "  :o_lit_id, :o_datatype_id, :o_datatype, :o_language, :o_text," "\n" \
+                                    "  :c_uri_id, :c_uri" "\n" \
+                                    ")" "\n" \
+    ;
+
+    librdf_node *s = librdf_statement_get_subject(statement);
+    librdf_node *p = librdf_statement_get_predicate(statement);
+    librdf_node *o = librdf_statement_get_object(statement);
+
+    hash_t s_uri_id = NULL_ID;
+    hash_t s_blank_id = NULL_ID;
+    hash_t p_uri_id = NULL_ID;
+    hash_t o_uri_id = NULL_ID;
+    hash_t o_blank_id = NULL_ID;
+    hash_t o_lit_id = NULL_ID;
+    hash_t o_type_id = NULL_ID;
+    hash_t c_uri_id = NULL_ID;
+    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_insert), insert_triple_sql);
+    if( SQLITE_OK != bind_node_uri_id(stmt, db_ctx->digest, ":s_uri_id", s, &s_uri_id) ) return NULL;
+    if( SQLITE_OK != bind_node_uri(stmt, ":s_uri", s) ) return NULL;
+    if( SQLITE_OK != bind_node_blank_id(stmt, db_ctx->digest, ":s_blank_id", s, &s_blank_id) ) return NULL;
+    if( SQLITE_OK != bind_node_blank(stmt, ":s_blank", s) ) return NULL;
+    if( SQLITE_OK != bind_node_uri_id(stmt, db_ctx->digest, ":p_uri_id", p, &p_uri_id) ) return NULL;
+    if( SQLITE_OK != bind_node_uri(stmt, ":p_uri", p) ) return NULL;
+    if( SQLITE_OK != bind_node_uri_id(stmt, db_ctx->digest, ":o_uri_id", o, &o_uri_id) ) return NULL;
+    if( SQLITE_OK != bind_node_uri(stmt, ":o_uri", o) ) return NULL;
+    if( SQLITE_OK != bind_node_blank_id(stmt, db_ctx->digest, ":o_blank_id", o, &o_blank_id) ) return NULL;
+    if( SQLITE_OK != bind_node_blank(stmt, ":o_blank", o) ) return NULL;
+    if( SQLITE_OK != bind_node_lit_id(stmt, db_ctx->digest, ":o_lit_id", o, &o_lit_id) ) return NULL;
+    if( LIBRDF_NODE_TYPE_LITERAL == node_type(o) ) {
+        if( SQLITE_OK != bind_uri_id(stmt, db_ctx->digest, ":o_datatype_id", librdf_node_get_literal_value_datatype_uri(o), &o_type_id) ) return NULL;
+        if( SQLITE_OK != bind_uri( stmt, ":o_datatype", librdf_node_get_literal_value_datatype_uri(o) ) ) return NULL;
+        char *l = librdf_node_get_literal_value_language(o);
+        if( l )
+            if( SQLITE_OK != bind_text( stmt, ":o_language", (unsigned char *)l, strlen(l) ) ) return NULL;
+        size_t len = 0;
+        if( SQLITE_OK != bind_text(stmt, ":o_text", librdf_node_get_literal_value_as_counted_string(o, &len), len) ) return NULL;
     }
-    transaction_rollback(storage, begin);
-    return NULL;
+
+    if( SQLITE_OK != bind_node_uri_id(stmt, db_ctx->digest, ":c_uri_id", context_node, &c_uri_id) ) return NULL;
+    if( SQLITE_OK != bind_node_uri(stmt, ":c_uri", context_node) ) return NULL;
+
+    hash_t stmt_id = NULL_ID;
+    stmt_id ^= s_uri_id;
+    stmt_id ^= s_blank_id;
+    stmt_id ^= p_uri_id;
+    stmt_id ^= o_uri_id;
+    stmt_id ^= o_blank_id;
+    stmt_id ^= o_lit_id;
+    // stmt_id ^= o_type_id;
+    stmt_id ^= c_uri_id;
+
+    assert(stmt_id == stmt_hash(statement, context_node, db_ctx->digest) && "statement hash compatation mismatch");
+    if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) ) return NULL;
+
+    const sqlite_rc_t rc = sqlite3_step(stmt);
+    return SQLITE_DONE == rc ? statement : NULL;
 }
 
 
@@ -800,6 +741,11 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
     strncpy(name_copy, name, db_ctx->name_len + 1);
     db_ctx->name = name_copy;
 
+    if( !( db_ctx->digest = librdf_new_digest(get_world(storage), "MD5") ) ) {
+        free_hash(options);
+        return RET_ERROR;
+    }
+
     if( BOOL_NO != librdf_hash_get_as_boolean(options, "new") )
         db_ctx->is_new = BOOL_YES;  /* default is NOT NEW */
 
@@ -829,6 +775,8 @@ static void pub_terminate(librdf_storage *storage)
         return;
     if( db_ctx->name )
         LIBRDF_FREE(char *, (void *)db_ctx->name);
+    if( db_ctx->digest )
+        librdf_free_digest(db_ctx->digest);
     LIBRDF_FREE(instance_t *, db_ctx);
 }
 
@@ -840,18 +788,10 @@ static int pub_close(librdf_storage *storage)
     finalize_stmt( &(db_ctx->stmt_txn_start) );
     finalize_stmt( &(db_ctx->stmt_txn_commit) );
     finalize_stmt( &(db_ctx->stmt_txn_rollback) );
-    finalize_stmt( &(db_ctx->stmt_uri_so_set) );
-    finalize_stmt( &(db_ctx->stmt_uri_p_set) );
-    finalize_stmt( &(db_ctx->stmt_uri_t_set) );
-    finalize_stmt( &(db_ctx->stmt_uri_c_set) );
-    finalize_stmt( &(db_ctx->stmt_literal_set) );
-    finalize_stmt( &(db_ctx->stmt_blank_so_set) );
-    finalize_stmt( &(db_ctx->stmt_parts_get) );
-    finalize_stmt( &(db_ctx->stmt_spocs_get) );
-    finalize_stmt( &(db_ctx->stmt_spocs_set) );
+    finalize_stmt( &(db_ctx->stmt_triple_find) );
+    finalize_stmt( &(db_ctx->stmt_triple_insert) );
 
     finalize_stmt( &(db_ctx->stmt_size) );
-    finalize_stmt( &(db_ctx->stmt_find) );
 
     const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
     if( SQLITE_OK == rc )
@@ -900,9 +840,9 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
     }
     {
         const char *const sqls[] = {
-            "PRAGMA foreign_keys = OFF",
-            "PRAGMA recursive_triggers = ON",
-            "PRAGMA encoding = 'UTF-8'",
+            "PRAGMA foreign_keys = ON;",
+            "PRAGMA recursive_triggers = ON;",
+            "PRAGMA encoding = 'UTF-8';",
             NULL
         };
         for( int v = 0; sqls[v]; v++ ) {
@@ -916,7 +856,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
     // check & update schema (run migrations)
     {
         sqlite3_stmt *stmt = NULL;
-        prep_stmt(db_ctx->db, &stmt, "PRAGMA user_version");
+        prep_stmt(db_ctx->db, &stmt, "PRAGMA user_version;");
         if( SQLITE_ROW != sqlite3_step(stmt) ) {
             sqlite3_finalize(stmt);
             pub_close(storage);
@@ -931,64 +871,83 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         sqlite3_finalize(stmt);
 
         const char *schema_mig_to_1_sql = // generated via tools/sql2c.sh schema_mig_to_1.sql
+                                          "PRAGMA foreign_keys = ON;" "\n" \
+                                          "PRAGMA recursive_triggers = ON;" "\n" \
+                                          "PRAGMA encoding = 'UTF-8';" "\n" \
+                                          " -- URIs for subjects and objects" "\n" \
                                           "CREATE TABLE so_uris (" "\n" \
-                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                          "  ,uri TEXT NOT NULL" "\n" \
+                                          "  id INTEGER PRIMARY KEY" "\n" \
+                                          "  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
-                                          "CREATE UNIQUE INDEX so_uris_index ON so_uris (uri);" "\n" \
+                                          " -- blank node IDs for subjects and objects" "\n" \
                                           "CREATE TABLE so_blanks (" "\n" \
-                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                          "  ,blank TEXT NULL" "\n" \
+                                          "  id INTEGER PRIMARY KEY" "\n" \
+                                          "  ,blank TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
-                                          "CREATE UNIQUE INDEX so_blanks_index ON so_blanks (blank);" "\n" \
+                                          " -- URIs for predicates" "\n" \
                                           "CREATE TABLE p_uris (" "\n" \
-                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                          "  ,uri TEXT NOT NULL" "\n" \
+                                          "  id INTEGER PRIMARY KEY" "\n" \
+                                          "  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
-                                          "CREATE UNIQUE INDEX p_uris_index ON p_uris (uri);" "\n" \
+                                          " -- URIs for literal types" "\n" \
                                           "CREATE TABLE t_uris (" "\n" \
-                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                          "  ,uri TEXT NOT NULL" "\n" \
+                                          "  id INTEGER PRIMARY KEY" "\n" \
+                                          "  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
-                                          "CREATE UNIQUE INDEX t_uris_index ON t_uris (uri);" "\n" \
+                                          " -- literal values" "\n" \
                                           "CREATE TABLE o_literals (" "\n" \
-                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                          "  ,datatype INTEGER NOT NULL REFERENCES t_uris (id)" "\n" \
+                                          "  id INTEGER PRIMARY KEY" "\n" \
+                                          "  ,datatype_id INTEGER NULL REFERENCES t_uris(id)" "\n" \
+                                          "  ,language TEXT NULL" "\n" \
                                           "  ,text TEXT NOT NULL" "\n" \
-                                          "  ,language TEXT NOT NULL" "\n" \
                                           ");" "\n" \
-                                          "CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype);" "\n" \
+                                          "CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- semantic constraint, could be dropped to save space" "\n" \
+                                          " -- URIs for context" "\n" \
                                           "CREATE TABLE c_uris (" "\n" \
-                                          "  id INTEGER PRIMARY KEY AUTOINCREMENT -- start with 1" "\n" \
-                                          "  ,uri TEXT NOT NULL" "\n" \
+                                          "  id INTEGER PRIMARY KEY" "\n" \
+                                          "  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
-                                          "CREATE UNIQUE INDEX c_uris_index ON c_uris (uri);" "\n" \
-                                          "INSERT INTO so_uris (id, uri) VALUES (0,'');" "\n" \
-                                          "INSERT INTO so_blanks (id, blank) VALUES (0,'');" "\n" \
-                                          "INSERT INTO c_uris (id, uri) VALUES (0,'');" "\n" \
-                                          "INSERT INTO t_uris (id, uri) VALUES (0,'');" "\n" \
-                                          "CREATE TABLE spocs (" "\n" \
-                                          "  s_uri INTEGER NOT NULL    REFERENCES so_uris (id)" "\n" \
-                                          "  ,s_blank INTEGER NOT NULL REFERENCES so_blanks (id)" "\n" \
-                                          "  ,p_uri INTEGER NOT NULL   REFERENCES p_uris (id)" "\n" \
-                                          "  ,o_uri INTEGER NOT NULL   REFERENCES so_uris (id)" "\n" \
-                                          "  ,o_blank INTEGER NOT NULL REFERENCES so_blanks (id)" "\n" \
-                                          "  ,o_lit INTEGER NOT NULL   REFERENCES o_literals (id)" "\n" \
-                                          "  ,c_uri INTEGER NOT NULL   REFERENCES c_uris (id)" "\n" \
+                                          "CREATE TABLE triple_relations (" "\n" \
+                                          "  id INTEGER PRIMARY KEY" "\n" \
+                                          "  ,s_uri_id   INTEGER NULL      REFERENCES so_uris(id)" "\n" \
+                                          "  ,s_blank_id INTEGER NULL      REFERENCES so_blanks(id)" "\n" \
+                                          "  ,p_uri_id   INTEGER NOT NULL  REFERENCES p_uris(id)" "\n" \
+                                          "  ,o_uri_id   INTEGER NULL      REFERENCES so_uris(id)" "\n" \
+                                          "  ,o_blank_id INTEGER NULL      REFERENCES so_blanks(id)" "\n" \
+                                          "  ,o_lit_id   INTEGER NULL      REFERENCES o_literals(id)" "\n" \
+                                          "  ,c_uri_id   INTEGER NULL      REFERENCES c_uris(id)" "\n" \
+                                          "  , CONSTRAINT null_subject CHECK ( -- ensure uri/blank are mutually exclusively set" "\n" \
+                                          "    (s_uri_id IS NOT NULL AND s_blank_id IS NULL) OR" "\n" \
+                                          "    (s_uri_id IS NULL AND s_blank_id IS NOT NULL)" "\n" \
+                                          "  )" "\n" \
+                                          "  , CONSTRAINT null_object CHECK ( -- ensure uri/blank/literal are mutually exclusively set" "\n" \
+                                          "    (o_uri_id IS NOT NULL AND o_blank_id IS NULL AND o_lit_id IS NULL) OR" "\n" \
+                                          "    (o_uri_id IS NULL AND o_blank_id IS NOT NULL AND o_lit_id IS NULL) OR" "\n" \
+                                          "    (o_uri_id IS NULL AND o_blank_id IS NULL AND o_lit_id IS NOT NULL)" "\n" \
+                                          "  )" "\n" \
                                           ");" "\n" \
-                                          "CREATE UNIQUE INDEX spocs_index ON spocs (s_uri,s_blank,p_uri,o_uri,o_blank,o_lit,c_uri);" "\n" \
-                                          "CREATE VIEW spocs_full AS" "\n" \
+                                          " -- semantic constraint, could be dropped to save space:" "\n" \
+                                          "CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);" "\n" \
+                                          "CREATE INDEX triple_relations_index_s_uri_id   ON triple_relations(s_uri_id); -- WHERE s_uri_id IS NOT NULL;" "\n" \
+                                          "CREATE INDEX triple_relations_index_s_blank_id ON triple_relations(s_blank_id); -- WHERE s_blank_id IS NOT NULL;" "\n" \
+                                          "CREATE INDEX triple_relations_index_p_uri_id   ON triple_relations(p_uri_id); -- WHERE p_uri_id IS NOT NULL;" "\n" \
+                                          "CREATE INDEX triple_relations_index_o_uri_id   ON triple_relations(o_uri_id); -- WHERE o_uri_id IS NOT NULL;" "\n" \
+                                          "CREATE INDEX triple_relations_index_o_blank_id ON triple_relations(o_blank_id); -- WHERE s_blank_id IS NOT NULL;" "\n" \
+                                          "CREATE INDEX triple_relations_index_o_lit_id   ON triple_relations(o_lit_id); -- WHERE o_lit_id IS NOT NULL;" "\n" \
+                                          "CREATE INDEX o_literals_index_datatype_id      ON o_literals(datatype_id); -- WHERE datatype_id IS NOT NULL;" "\n" \
+                                          "CREATE VIEW triples AS" "\n" \
                                           "SELECT" "\n" \
-                                          "  -- the ids:" "\n" \
-                                          "  s_uris.id       AS s_uri_id" "\n" \
-                                          "  ,s_blanks.id     AS s_blank_id" "\n" \
-                                          "  ,p_uris.id       AS p_uri_id" "\n" \
-                                          "  ,o_uris.id       AS o_uri_id" "\n" \
-                                          "  ,o_blanks.id     AS o_blank_id" "\n" \
-                                          "  ,o_literals.id   AS o_lit_id" "\n" \
-                                          "  ,o_lit_uris.id   AS o_datatype_id" "\n" \
-                                          "  ,c_uris.id       AS c_uri_id" "\n" \
-                                          "  -- the values:" "\n" \
+                                          "  -- all *_id (hashes):" "\n" \
+                                          "  triple_relations.id AS id" "\n" \
+                                          "  ,s_uri_id" "\n" \
+                                          "  ,s_blank_id" "\n" \
+                                          "  ,p_uri_id" "\n" \
+                                          "  ,o_uri_id" "\n" \
+                                          "  ,o_blank_id" "\n" \
+                                          "  ,o_lit_id" "\n" \
+                                          "  ,o_literals.datatype_id AS o_datatype_id" "\n" \
+                                          "  ,c_uri_id" "\n" \
+                                          "  -- all joined values:" "\n" \
                                           "  ,s_uris.uri      AS s_uri" "\n" \
                                           "  ,s_blanks.blank  AS s_blank" "\n" \
                                           "  ,p_uris.uri      AS p_uri" "\n" \
@@ -998,18 +957,56 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           "  ,o_literals.language AS o_language" "\n" \
                                           "  ,o_lit_uris.uri  AS o_datatype" "\n" \
                                           "  ,c_uris.uri      AS c_uri" "\n" \
-                                          "FROM spocs" "\n" \
-                                          "INNER JOIN so_uris    AS s_uris     ON spocs.s_uri      = s_uris.id" "\n" \
-                                          "INNER JOIN so_blanks  AS s_blanks   ON spocs.s_blank    = s_blanks.id" "\n" \
-                                          "INNER JOIN p_uris     AS p_uris     ON spocs.p_uri      = p_uris.id" "\n" \
-                                          "INNER JOIN so_uris    AS o_uris     ON spocs.o_uri      = o_uris.id" "\n" \
-                                          "INNER JOIN so_blanks  AS o_blanks   ON spocs.o_blank    = o_blanks.id" "\n" \
-                                          "LEFT OUTER JOIN o_literals AS o_literals ON spocs.o_lit = o_literals.id" "\n" \
-                                          "LEFT OUTER JOIN t_uris     AS o_lit_uris ON o_literals.datatype   = o_lit_uris.id" "\n" \
-                                          "INNER JOIN c_uris     AS c_uris     ON spocs.c_uri      = c_uris.id" "\n" \
+                                          "FROM triple_relations" "\n" \
+                                          "LEFT OUTER JOIN so_uris    AS s_uris     ON triple_relations.s_uri_id   = s_uris.id" "\n" \
+                                          "LEFT OUTER JOIN so_blanks  AS s_blanks   ON triple_relations.s_blank_id = s_blanks.id" "\n" \
+                                          "INNER      JOIN p_uris     AS p_uris     ON triple_relations.p_uri_id   = p_uris.id" "\n" \
+                                          "LEFT OUTER JOIN so_uris    AS o_uris     ON triple_relations.o_uri_id   = o_uris.id" "\n" \
+                                          "LEFT OUTER JOIN so_blanks  AS o_blanks   ON triple_relations.o_blank_id = o_blanks.id" "\n" \
+                                          "LEFT OUTER JOIN o_literals AS o_literals ON triple_relations.o_lit_id   = o_literals.id" "\n" \
+                                          "LEFT OUTER JOIN t_uris     AS o_lit_uris ON o_literals.datatype_id      = o_lit_uris.id" "\n" \
+                                          "LEFT OUTER JOIN c_uris     AS c_uris     ON triple_relations.c_uri_id   = c_uris.id" "\n" \
                                           ";" "\n" \
+                                          "CREATE TRIGGER triples_insert INSTEAD OF INSERT ON triples" "\n" \
+                                          "FOR EACH ROW BEGIN" "\n" \
+                                          "  -- subject uri/blank" "\n" \
+                                          "  INSERT OR IGNORE INTO so_uris   (id,uri)   VALUES (NEW.s_uri_id,      NEW.s_uri);" "\n" \
+                                          "  INSERT OR IGNORE INTO so_blanks (id,blank) VALUES (NEW.s_blank_id,    NEW.s_blank);" "\n" \
+                                          "  -- predicate uri" "\n" \
+                                          "  INSERT OR IGNORE INTO p_uris    (id,uri)   VALUES (NEW.p_uri_id,      NEW.p_uri);" "\n" \
+                                          "  -- object uri/blank" "\n" \
+                                          "  INSERT OR IGNORE INTO so_uris   (id,uri)   VALUES (NEW.o_uri_id,      NEW.o_uri);" "\n" \
+                                          "  INSERT OR IGNORE INTO so_blanks (id,blank) VALUES (NEW.o_blank_id,    NEW.o_blank);" "\n" \
+                                          "  -- object literal" "\n" \
+                                          "  INSERT OR IGNORE INTO t_uris    (id,uri)   VALUES (NEW.o_datatype_id, NEW.o_datatype);" "\n" \
+                                          "  INSERT OR IGNORE INTO o_literals(id,datatype_id,language,text) VALUES (NEW.o_lit_id, NEW.o_datatype_id, NEW.o_language, NEW.o_text);" "\n" \
+                                          "  -- context uri" "\n" \
+                                          "  INSERT OR IGNORE INTO c_uris    (id,uri)   VALUES (NEW.c_uri_id,      NEW.c_uri);" "\n" \
+                                          "  -- triple" "\n" \
+                                          "  INSERT INTO triple_relations(id, s_uri_id, s_blank_id, p_uri_id, o_uri_id, o_blank_id, o_lit_id, c_uri_id)" "\n" \
+                                          "  VALUES (NEW.id, NEW.s_uri_id, NEW.s_blank_id, NEW.p_uri_id, NEW.o_uri_id, NEW.o_blank_id, NEW.o_lit_id, NEW.c_uri_id);" "\n" \
+                                          "END;" "\n" \
+                                          "CREATE TRIGGER triples_delete INSTEAD OF DELETE ON triples" "\n" \
+                                          "FOR EACH ROW BEGIN" "\n" \
+                                          "  -- triple" "\n" \
+                                          "  DELETE FROM triple_relations WHERE id = OLD.id;" "\n" \
+                                          "  -- subject uri/blank" "\n" \
+                                          "  DELETE FROM so_uris    WHERE (OLD.s_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_uri_id    = OLD.s_uri_id))      AND (id = OLD.s_uri_id);" "\n" \
+                                          "  DELETE FROM so_blanks  WHERE (OLD.s_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_blank_id  = OLD.s_blank_id))    AND (id = OLD.s_blank_id);" "\n" \
+                                          "  -- predicate uri" "\n" \
+                                          "  DELETE FROM p_uris     WHERE (OLD.p_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE p_uri_id    = OLD.p_uri_id))      AND (id = OLD.p_uri_id);" "\n" \
+                                          "  -- object uri/blank" "\n" \
+                                          "  DELETE FROM so_uris    WHERE (OLD.o_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_uri_id    = OLD.o_uri_id))      AND (id = OLD.o_uri_id);" "\n" \
+                                          "  DELETE FROM so_blanks  WHERE (OLD.o_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_blank_id  = OLD.o_blank_id))    AND (id = OLD.o_blank_id);" "\n" \
+                                          "  -- object literal" "\n" \
+                                          "  DELETE FROM o_literals WHERE (OLD.o_lit_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_lit_id    = OLD.o_lit_id))      AND (id = OLD.o_lit_id);" "\n" \
+                                          "  DELETE FROM t_uris     WHERE (OLD.o_datatype_id IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM o_literals       WHERE datatype_id = OLD.o_datatype_id)) AND (id = OLD.o_datatype_id);" "\n" \
+                                          "  -- context uri" "\n" \
+                                          "  DELETE FROM c_uris     WHERE (OLD.c_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE c_uri_id    = OLD.c_uri_id))      AND (id = OLD.c_uri_id);" "\n" \
+                                          "END;" "\n" \
                                           "PRAGMA user_version=1;" "\n" \
         ;
+
 
         const char *const migrations[] = {
             schema_mig_to_1_sql,
@@ -1239,20 +1236,17 @@ static void pub_iter_finished(void *_ctx)
 
 #pragma mark Query & Iterate
 
+#define TABLE_TRIPLES_NAME "triple_relations"
 
 static int pub_size(librdf_storage *storage)
 {
     instance_t *db_ctx = get_instance(storage);
-    sqlite_rc_t begin = transaction_start(storage);
-
-    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(rowid) FROM " TABLE_TRIPLES_NAME);
+    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(id) FROM " TABLE_TRIPLES_NAME);
     const sqlite_rc_t rc = sqlite3_step(stmt);
     if( SQLITE_ROW == rc ) {
-        const id_t ret = (id_t)sqlite3_column_int64(stmt, 0);
-        transaction_rollback(storage, begin);
-        return ret;
+        const int ret = sqlite3_column_int(stmt, 0);
+        return (int)ret;
     }
-    transaction_rollback(storage, begin);
     return NULL_ID;
 }
 
@@ -1272,6 +1266,49 @@ static int pub_contains_statement(librdf_storage *storage, librdf_statement *sta
 
 static librdf_stream *pub_context_find_statements(librdf_storage *storage, librdf_statement *statement, librdf_node *context_node)
 {
+#if 1
+
+
+    const char *find_triples_sql = // generated via tools/sql2c.sh find_triples.sql
+                                   " -- result columns must match as used in pub_iter_get_statement" "\n" \
+                                   "SELECT" "\n" \
+                                   " -- all *_id (hashes):" "\n" \
+                                   "  id" "\n" \
+                                   "  ,s_uri_id" "\n" \
+                                   "  ,s_blank_id" "\n" \
+                                   "  ,p_uri_id" "\n" \
+                                   "  ,o_uri_id" "\n" \
+                                   "  ,o_blank_id" "\n" \
+                                   "  ,o_lit_id" "\n" \
+                                   "  ,o_datatype_id" "\n" \
+                                   "  ,c_uri_id" "\n" \
+                                   " -- all values:" "\n" \
+                                   "  ,s_uri" "\n" \
+                                   "  ,s_blank" "\n" \
+                                   "  ,p_uri" "\n" \
+                                   "  ,o_uri" "\n" \
+                                   "  ,o_blank" "\n" \
+                                   "  ,o_text" "\n" \
+                                   "  ,o_language" "\n" \
+                                   "  ,o_datatype" "\n" \
+                                   "  ,c_uri" "\n" \
+                                   "FROM triples" "\n" \
+                                   "WHERE" "\n" \
+                                   " -- subject" "\n" \
+                                   "		((:s_uri_id     IS NULL) OR (s_uri_id   = :s_uri_id))""\n" \
+                                   "AND ((:s_blank_id	IS NULL) OR (s_blank_id = :s_blank_id))""\n" \
+                                   "AND ((:p_uri_id     IS NULL) OR (p_uri_id   = :p_uri_id))" "\n" \
+                                   " -- object" "\n" \
+                                   "AND ((:o_uri_id     IS NULL) OR (o_uri_id   = :o_uri_id))" "\n" \
+                                   "AND ((:o_blank_id	IS NULL) OR (o_blank_id = :o_blank_id))""\n" \
+                                   "AND ((:o_lit_id	  IS NULL) OR (o_lit_id   = :o_lit_id))" "\n" \
+                                   " -- context node" "\n" \
+                                   "AND ((:c_uri_id     IS NULL) OR (c_uri_id   = :c_uri_id))" "\n" \
+    ;
+
+
+    return NULL;
+#else
     sqlite_rc_t begin = transaction_start(storage);
 
     instance_t *db_ctx = get_instance(storage);
@@ -1323,6 +1360,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     librdf_stream *stream = librdf_new_stream(w, iter, &pub_iter_end_of_stream, &pub_iter_next_statement, &pub_iter_get_statement, &pub_iter_finished);
 
     return stream;
+#endif
 }
 
 
