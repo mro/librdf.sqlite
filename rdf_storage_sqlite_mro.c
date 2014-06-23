@@ -243,14 +243,14 @@ static hash_t stmt_hash(librdf_statement *stmt, librdf_node *context_node, librd
     librdf_node *o = librdf_statement_get_object(stmt);
 
     hash_t stmt_id = NULL_ID;
-    stmt_id ^= node_hash_uri(s, digest);
-    stmt_id ^= node_hash_blank(s, digest);
-    stmt_id ^= node_hash_uri(p, digest);
-    stmt_id ^= node_hash_uri(o, digest);
-    stmt_id ^= node_hash_blank(o, digest);
-    stmt_id ^= node_hash_literal(o, digest);
+    stmt_id = 1 + stmt_id ^ node_hash_uri(s, digest);
+    stmt_id = 1 + stmt_id ^ node_hash_blank(s, digest);
+    stmt_id = 1 + stmt_id ^ node_hash_uri(p, digest);
+    stmt_id = 1 + stmt_id ^ node_hash_uri(o, digest);
+    stmt_id = 1 + stmt_id ^ node_hash_blank(o, digest);
+    stmt_id = 1 + stmt_id ^ node_hash_literal(o, digest);
     // stmt_id ^= uri_hash(librdf_node_get_literal_value_datatype_uri(o), digest);
-    stmt_id ^= node_hash_uri(context_node, digest);
+    stmt_id = 1 + stmt_id ^ node_hash_uri(context_node, digest);
 
     return stmt_id;
 }
@@ -496,14 +496,14 @@ static sqlite_rc_t bind_stmt(instance_t *db_ctx, librdf_statement *statement, li
         return SQLITE_OK;
 
     hash_t stmt_id = NULL_ID;
-    stmt_id ^= s_uri_id;
-    stmt_id ^= s_blank_id;
-    stmt_id ^= p_uri_id;
-    stmt_id ^= o_uri_id;
-    stmt_id ^= o_blank_id;
-    stmt_id ^= o_lit_id;
+    stmt_id = 1 + stmt_id ^ s_uri_id;
+    stmt_id = 1 + stmt_id ^ s_blank_id;
+    stmt_id = 1 + stmt_id ^ p_uri_id;
+    stmt_id = 1 + stmt_id ^ o_uri_id;
+    stmt_id = 1 + stmt_id ^ o_blank_id;
+    stmt_id = 1 + stmt_id ^ o_lit_id;
     // stmt_id ^= o_type_id;
-    stmt_id ^= c_uri_id;
+    stmt_id = 1 + stmt_id ^ c_uri_id;
 
     assert(stmt_id == stmt_hash(statement, context_node, db_ctx->digest) && "statement hash compatation mismatch");
     if( SQLITE_OK != ( rc = bind_int(stmt, ":stmt_id", stmt_id) ) ) return rc;
