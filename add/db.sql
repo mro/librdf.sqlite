@@ -1,16 +1,16 @@
---
+-- 
 -- Copyright (c) 2014, Marcus Rohrmoser mobile Software
 -- All rights reserved.
---
+-- 
 -- Redistribution and use in source and binary forms, with or without modification, are permitted
 -- provided that the following conditions are met:
---
+-- 
 -- 1. Redistributions of source code must retain the above copyright notice, this list of conditions
 --    and the following disclaimer.
---
+-- 
 -- 2. The software must not be used for military or intelligence or related purposes nor
 --    anything that's in conflict with human rights as declared in http://www.un.org/en/documents/udhr/ .
---
+-- 
 -- THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR
 -- IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
 -- FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
@@ -28,25 +28,25 @@ PRAGMA encoding = 'UTF-8';
  -- URIs for subjects and objects
 CREATE TABLE so_uris (
   id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space
 );
 
  -- blank node IDs for subjects and objects
 CREATE TABLE so_blanks (
   id INTEGER PRIMARY KEY
-  ,blank TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,blank TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space
 );
 
  -- URIs for predicates
 CREATE TABLE p_uris (
   id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space
 );
 
  -- URIs for literal types
 CREATE TABLE t_uris (
   id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space
 );
 
  -- literal values
@@ -56,12 +56,12 @@ CREATE TABLE o_literals (
   ,language TEXT NULL
   ,text TEXT NOT NULL
 );
--- CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- semantic constraint, could be dropped to save space
+CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- semantic constraint, could be dropped to save space
 
  -- URIs for context
 CREATE TABLE c_uris (
   id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space
 );
 
 CREATE TABLE triple_relations (
@@ -84,7 +84,7 @@ CREATE TABLE triple_relations (
   )
 );
  -- semantic constraint, could be dropped to save space:
--- CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);
+CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);
 -- optional indexes for lookup performance, mostly on DELETE.
 CREATE INDEX triple_relations_index_s_uri_id   ON triple_relations(s_uri_id); -- WHERE s_uri_id IS NOT NULL;
 CREATE INDEX triple_relations_index_s_blank_id ON triple_relations(s_blank_id); -- WHERE s_blank_id IS NOT NULL;
@@ -167,3 +167,93 @@ FOR EACH ROW BEGIN
 END;
 
 PRAGMA user_version=1;
+
+
+
+
+-- spo URIs
+INSERT INTO triples(
+  id,
+  s_uri_id, s_uri,
+  s_blank_id, s_blank,
+  p_uri_id, p_uri,
+  o_uri_id, o_uri,
+  o_blank_id, o_blank,
+  o_lit_id, o_text, o_language, o_datatype_id, o_datatype,
+  c_uri_id, c_uri
+) VALUES (
+  100,
+  1001, 's foo',
+  NULL, NULL,
+  3001, 'p foo',
+  4001, 'o foo',
+  NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL
+);
+
+-- so BLANKs, p URI
+INSERT INTO triples(
+  id,
+  s_uri_id, s_uri,
+  s_blank_id, s_blank,
+  p_uri_id, p_uri,
+  o_uri_id, o_uri,
+  o_blank_id, o_blank,
+  o_lit_id, o_datatype_id, o_datatype, o_language, o_text,
+  c_uri_id, c_uri
+) VALUES (
+  101,
+  NULL, NULL,
+  2001, 's -',
+  3002, 'p bar',
+  NULL, NULL,
+  5001, 'o -',
+  NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL
+);
+
+-- s BLANK, p URI, o LITERAL
+INSERT INTO triples(
+  id,
+  s_uri_id, s_uri,
+  s_blank_id, s_blank,
+  p_uri_id, p_uri,
+  o_uri_id, o_uri,
+  o_blank_id, o_blank,
+  o_lit_id, o_datatype_id, o_datatype, o_language, o_text,
+  c_uri_id, c_uri
+) VALUES (
+  102,
+  NULL, NULL,
+  2001, 's -',
+  3001, 'p foo',
+  NULL, NULL,
+  NULL, NULL,
+  6001, 7001, 'xsd:string', 'deu', 'Lorem ipsum',
+  NULL, NULL
+);
+
+-- s BLANK, p URI, o LITERAL
+INSERT INTO triples(
+  id,
+  s_uri_id, s_uri,
+  s_blank_id, s_blank,
+  p_uri_id, p_uri,
+  o_uri_id, o_uri,
+  o_blank_id, o_blank,
+  o_lit_id, o_datatype_id, o_datatype, o_language, o_text,
+  c_uri_id, c_uri
+) VALUES (
+  103,
+  NULL, NULL,
+  2001, 's -',
+  3001, 'p foo',
+  NULL, NULL,
+  NULL, NULL,
+  6002, NULL, NULL, NULL, 'Lorem ipsum 2',
+  NULL, NULL
+);
+
+-- DELETE FROM triples;
+

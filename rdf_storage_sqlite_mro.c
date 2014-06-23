@@ -872,22 +872,22 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           " -- URIs for subjects and objects" "\n" \
                                           "CREATE TABLE so_uris (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           " -- blank node IDs for subjects and objects" "\n" \
                                           "CREATE TABLE so_blanks (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,blank TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,blank TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           " -- URIs for predicates" "\n" \
                                           "CREATE TABLE p_uris (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           " -- URIs for literal types" "\n" \
                                           "CREATE TABLE t_uris (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           " -- literal values" "\n" \
                                           "CREATE TABLE o_literals (" "\n" \
@@ -896,11 +896,10 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           "  ,language TEXT NULL" "\n" \
                                           "  ,text TEXT NOT NULL" "\n" \
                                           ");" "\n" \
-                                          "CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- semantic constraint, could be dropped to save space" "\n" \
                                           " -- URIs for context" "\n" \
                                           "CREATE TABLE c_uris (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           "CREATE TABLE triple_relations (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
@@ -922,7 +921,6 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           "  )" "\n" \
                                           ");" "\n" \
                                           " -- semantic constraint, could be dropped to save space:" "\n" \
-                                          "CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);" "\n" \
                                           "CREATE INDEX triple_relations_index_s_uri_id   ON triple_relations(s_uri_id); -- WHERE s_uri_id IS NOT NULL;" "\n" \
                                           "CREATE INDEX triple_relations_index_s_blank_id ON triple_relations(s_blank_id); -- WHERE s_blank_id IS NOT NULL;" "\n" \
                                           "CREATE INDEX triple_relations_index_p_uri_id   ON triple_relations(p_uri_id); -- WHERE p_uri_id IS NOT NULL;" "\n" \
@@ -1001,7 +999,6 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           "END;" "\n" \
                                           "PRAGMA user_version=1;" "\n" \
         ;
-
 
         const char *const migrations[] = {
             schema_mig_to_1_sql,
