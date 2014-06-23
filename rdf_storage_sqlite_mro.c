@@ -105,6 +105,7 @@ typedef struct
     sqlite3_stmt *stmt_txn_rollback;
     sqlite3_stmt *stmt_triple_find;
     sqlite3_stmt *stmt_triple_insert;
+    sqlite3_stmt *stmt_triple_delete;
 
     sqlite3_stmt *stmt_size;
 }
@@ -776,6 +777,7 @@ static int pub_close(librdf_storage *storage)
     finalize_stmt( &(db_ctx->stmt_txn_rollback) );
     finalize_stmt( &(db_ctx->stmt_triple_find) );
     finalize_stmt( &(db_ctx->stmt_triple_insert) );
+    finalize_stmt( &(db_ctx->stmt_triple_delete) );
 
     finalize_stmt( &(db_ctx->stmt_size) );
 
@@ -1386,12 +1388,20 @@ static int pub_context_remove_statement(librdf_storage *storage, librdf_node *co
 {
     if( !statement )
         return RET_OK;
-    return RET_ERROR;
-    const sqlite_rc_t txn = transaction_start(storage);
-    /*
-     * DELETE spocs
-     */
-    return transaction_commit(storage, txn);
+    if( !librdf_statement_is_complete(statement) )
+        return RET_ERROR;
+    assert(storage && "must be set");
+
+    instance_t *db_ctx = get_instance(storage);
+
+    const hash_t stmt_id = stmt_hash(statement, context_node, db_ctx->digest);
+    assert(!isNULL_ID(stmt_id) && "mustn't be nil");
+
+    const char *delete_triple_sql = "DELETE id FROM triple_relations WHERE id = :stmt_id";
+    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_delete), delete_triple_sql);
+
+    if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) ) return NULL;
+    return SQLITE_OK == sqlite3_step(stmt) ? RET_OK : RET_ERROR;
 }
 
 
