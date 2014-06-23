@@ -1401,11 +1401,11 @@ static int pub_context_remove_statement(librdf_storage *storage, librdf_node *co
     const hash_t stmt_id = stmt_hash(statement, context_node, db_ctx->digest);
     assert(!isNULL_ID(stmt_id) && "mustn't be nil");
 
-    const char *delete_triple_sql = "DELETE id FROM triple_relations WHERE id = :stmt_id";
+    const char *delete_triple_sql = "DELETE FROM triple_relations WHERE id = :stmt_id";
     sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_delete), delete_triple_sql);
 
-    if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) ) return NULL;
-    return SQLITE_OK == sqlite3_step(stmt) ? RET_OK : RET_ERROR;
+    if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) ) return RET_ERROR;
+    return SQLITE_DONE == sqlite3_step(stmt) ? RET_OK : RET_ERROR;
 }
 
 
