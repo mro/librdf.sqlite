@@ -1362,7 +1362,8 @@ static int pub_context_add_statement(librdf_storage *storage, librdf_node *conte
 static int pub_context_add_statements(librdf_storage *storage, librdf_node *context_node, librdf_stream *statement_stream)
 {
     const sqlite_rc_t txn = transaction_start(storage);
-    for( librdf_statement *stmt = librdf_stream_get_object(statement_stream); !librdf_stream_end(statement_stream); librdf_stream_next(statement_stream) ) {
+    for( ; !librdf_stream_end(statement_stream); librdf_stream_next(statement_stream) ) {
+        librdf_statement *stmt = librdf_stream_get_object(statement_stream);
         const int rc = pub_context_add_statement(storage, context_node, stmt);
         if( RET_OK != rc ) {
             transaction_rollback(storage, txn);
