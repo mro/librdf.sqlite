@@ -31,12 +31,19 @@ const char *LIBRDF_STORAGE_SQLITE_MRO = "http://purl.mro.name/rdf/sqlite/mro";
 
 #include <stdlib.h>
 // #include <stdio.h>
-#include <assert.h>
 #include <string.h>
 #include <unistd.h>
 #include <redland.h>
 #include <rdf_storage.h>
 #include <sqlite3.h>
+
+#if DEBUG
+#undef NDEBUG
+#else
+#define NDEBUG 1
+#endif
+#include <assert.h>
+
 
 #pragma mark Basic Types & Constants
 
@@ -49,7 +56,7 @@ typedef sqlite3_uint64 hash_t;
 static const hash_t NULL_ID = 0;
 static inline boolean_t isNULL_ID(const hash_t x)
 {
-    return x == 0;
+    return NULL_ID == x;
 }
 
 
@@ -142,7 +149,7 @@ static inline void free_hash(librdf_hash *hash)
 
 static inline librdf_node_type node_type(librdf_node *node)
 {
-    return node == NULL ? LIBRDF_NODE_TYPE_UNKNOWN : librdf_node_get_type(node);
+    return NULL == node ? LIBRDF_NODE_TYPE_UNKNOWN : librdf_node_get_type(node);
 }
 
 
@@ -263,12 +270,12 @@ static int printExplainQueryPlan(sqlite3_stmt *pStmt)
     if( zSql == 0 ) return SQLITE_ERROR;
 
     char *zExplain = sqlite3_mprintf("EXPLAIN QUERY PLAN %s", zSql);
-    if( zExplain == 0 ) return SQLITE_NOMEM;
+    if( 0 == zExplain ) return SQLITE_NOMEM;
 
     sqlite3_stmt *pExplain; /* Compiled EXPLAIN QUERY PLAN command */
     const int rc = sqlite3_prepare_v2(sqlite3_db_handle(pStmt), zExplain, -1, &pExplain, 0);
     sqlite3_free(zExplain);
-    if( rc != SQLITE_OK ) return rc;
+    if( SQLITE_OK != rc ) return rc;
 
     while( SQLITE_ROW == sqlite3_step(pExplain) ) {
         const int iSelectid = sqlite3_column_int(pExplain, 0);
@@ -339,11 +346,11 @@ static sqlite3_stmt *prep_stmt(sqlite3 *db, sqlite3_stmt **stmt_p, const char *z
 
 static void finalize_stmt(sqlite3_stmt **pStmt)
 {
-    if( *pStmt == NULL )
+    if( NULL == *pStmt )
         return;
     sqlite3_reset(*pStmt);
     const sqlite_rc_t rc = sqlite3_finalize(*pStmt);
-    assert(rc == SQLITE_OK && "ouch");
+    assert(SQLITE_OK == rc && "ouch");
     *pStmt = NULL;
 }
 
@@ -362,7 +369,7 @@ static inline sqlite_rc_t bind_int(sqlite3_stmt *stmt, const char *name, const h
     assert(stmt && "stmt mandatory");
     assert(name && "name mandatory");
     const int idx = sqlite3_bind_parameter_index(stmt, name);
-    return idx == 0 ? SQLITE_OK : sqlite3_bind_int64(stmt, idx, _id);
+    return 0 == idx ? SQLITE_OK : sqlite3_bind_int64(stmt, idx, _id);
 }
 
 
@@ -371,7 +378,7 @@ static inline sqlite_rc_t bind_text(sqlite3_stmt *stmt, const char *name, const 
     assert(stmt && "stmt mandatory");
     assert(name && "name mandatory");
     const int idx = sqlite3_bind_parameter_index(stmt, name);
-    return idx == 0 ? SQLITE_OK : ( text == NULL ? sqlite3_bind_null(stmt, idx) : sqlite3_bind_text(stmt, idx, (const char *)text, (int)text_len, SQLITE_STATIC) );
+    return 0 == idx ? SQLITE_OK : ( text == NULL ? sqlite3_bind_null(stmt, idx) : sqlite3_bind_text(stmt, idx, (const char *)text, (int)text_len, SQLITE_STATIC) );
 }
 
 
@@ -540,7 +547,7 @@ static sqlite_rc_t transaction_commit(librdf_storage *storage, const sqlite_rc_t
     if( begin != SQLITE_OK )
         return SQLITE_OK;
     instance_t *db_ctx = get_instance(storage);
-    if( db_ctx->in_transaction == BOOL_NO )
+    if( BOOL_NO == db_ctx->in_transaction )
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_commit), "COMMIT  TRANSACTION;") );
     db_ctx->in_transaction = !(SQLITE_DONE == rc);
@@ -554,7 +561,7 @@ static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc
     if( begin != SQLITE_OK )
         return SQLITE_OK;
     instance_t *db_ctx = get_instance(storage);
-    if( db_ctx->in_transaction == BOOL_NO )
+    if( BOOL_NO == db_ctx->in_transaction )
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_rollback), "ROLLBACK TRANSACTION;") );
     db_ctx->in_transaction = !(SQLITE_DONE == rc);
@@ -586,8 +593,8 @@ static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *reque
     if( fail_ok )
         status = SQLITE_OK;
 
-    if( status != SQLITE_OK ) {
-        if( status == SQLITE_LOCKED && !callback && db_ctx->in_stream ) {
+    if( SQLITE_OK != status ) {
+        if( SQLITE_LOCKED == status && !callback && db_ctx->in_stream ) {
             /* error message from sqlite3_exec needs to be freed on both sqlite 2 and 3 */
             if( errmsg )
                 sqlite3_free(errmsg);
@@ -646,7 +653,7 @@ typedef enum {
 idx_triple_column_t;
 
 
-static librdf_statement *find_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement, boolean_t create)
+static librdf_statement *find_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement, const boolean_t create)
 {
     assert(statement && "statement must be set.");
     assert(librdf_statement_is_complete(statement) && "statement must be complete.");
@@ -802,9 +809,9 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
     {
         const sqlite_rc_t rc = sqlite3_open(db_ctx->name, &db_ctx->db);
         char *errmsg = NULL;
-        if( rc != SQLITE_OK )
+        if( SQLITE_OK != rc )
             errmsg = (char *)sqlite3_errmsg(db_ctx->db);
-        if( rc != SQLITE_OK ) {
+        if( SQLITE_OK != rc ) {
             librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL,
                        "SQLite database %s open failed - %s", db_ctx->name, errmsg);
             pub_close(storage);
@@ -817,11 +824,11 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
     }
 
     // set DB session PRAGMAs
-    if( db_ctx->synchronous >= SYNC_OFF ) {
+    if( SYNC_OFF <= db_ctx->synchronous ) {
         char sql[250];
         const size_t len = snprintf(sql, sizeof(sql) - 1, "PRAGMA synchronous=%s;", synchronous_flags[db_ctx->synchronous]);
         assert(len < sizeof(sql) && "buffer too small.");
-        if( exec_stmt(db_ctx->db, sql) != SQLITE_OK ) {
+        if( SQLITE_OK != exec_stmt(db_ctx->db, sql) ) {
             pub_close(storage);
             return RET_ERROR;
         }
@@ -1003,7 +1010,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         {
             const size_t mig_count = sizeof(migrations) / sizeof(migrations[0]) - 1;
             assert(!migrations[mig_count] && "migrations must be NULL terminated.");
-            if( schema_version > mig_count ) {
+            if( mig_count < schema_version ) {
                 // schema is more recent than this source file knows to handle.
                 pub_close(storage);
                 return RET_ERROR;
@@ -1020,13 +1027,13 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                 // assert new schema version
                 sqlite3_stmt *stmt = NULL;
                 prep_stmt(db_ctx->db, &stmt, "PRAGMA user_version");
-                if( sqlite3_step(stmt) != SQLITE_ROW ) {
+                if( SQLITE_ROW != sqlite3_step(stmt) ) {
                     sqlite3_finalize(stmt);
                     pub_close(storage);
                     return RET_ERROR;
                 }
                 const int v_new = sqlite3_column_int(stmt, 0);
-                if( sqlite3_step(stmt) != SQLITE_DONE ) {
+                if( SQLITE_DONE != sqlite3_step(stmt) ) {
                     sqlite3_finalize(stmt);
                     pub_close(storage);
                     return RET_ERROR;
