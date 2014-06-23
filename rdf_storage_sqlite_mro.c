@@ -55,7 +55,6 @@ static inline boolean_t isNULL_ID(const hash_t x)
 
 #define RET_ERROR 1
 #define RET_OK 0
-#define F_OK 0
 
 /** C-String type for URIs. */
 typedef unsigned char *str_uri_t;
@@ -65,14 +64,6 @@ typedef unsigned char *str_blank_t;
 typedef unsigned char *str_lit_val_t;
 /** C-String type for (xml) language ids. */
 typedef char *str_lang_t;
-
-#define NULL_LANG ( (str_lang_t)"" )
-#define isNULL_LANG(x) ( (x) == NULL || (x)[0] == '\0' )
-
-#define NULL_URI ( (str_uri_t)"" )
-#define isNULL_URI(x) ( (x) == NULL || (x)[0] == '\0' )
-
-#define isNULL_BLANK(x) ( (x) == NULL || (x)[0] == '\0' )
 
 
 /** index into synchronous_flags */
@@ -154,28 +145,29 @@ static inline librdf_node_type node_type(librdf_node *node)
 }
 
 
-/** SHARED pointer - copy in case but don't free.
+/* Copy first 8 bytes of digest into 64bit using a method portable across big/little endianness.
  */
-static inline librdf_uri *node_uri(librdf_node *node)
-{
-    return node == NULL ? NULL : librdf_node_get_uri(node);
-}
-
-
 static hash_t digest_hash(librdf_digest *digest)
 {
     assert(digest && "must be set");
     librdf_digest_final(digest);
+
+    assert(librdf_digest_get_digest_length(digest) >= sizeof(hash_t) && "digest length too small");
+    const int byte_count = 8;
+    const int bit_per_byte = 8;
+    assert(byte_count == sizeof(hash_t) && "made for 8-byte (64-bit) hashes");
     int8_t *diges = (int8_t *)librdf_digest_get_digest(digest);
-    hash_t hash = 0;
-    for( int i = 0; i < 8; i++ )
-        hash += ( (hash_t)diges[i] ) << (i * 8);
-    assert(!isNULL_ID(hash) && "null hash");
-    return hash;
+    sqlite3_uint64 ret = 0; // enforce unsigned
+    for( int i = byte_count - 1; i >= 0; i-- ) {
+        ret <<= bit_per_byte;
+        ret += diges[i];
+    }
+    assert(!isNULL_ID(ret) && "null hash");
+    return (hash_t)ret;
 }
 
 
-static hash_t uri_hash(librdf_uri *uri, librdf_digest *digest)
+static hash_t hash_uri(librdf_uri *uri, librdf_digest *digest)
 {
     if( !uri )
         return NULL_ID;
@@ -192,7 +184,7 @@ static hash_t uri_hash(librdf_uri *uri, librdf_digest *digest)
 
 static hash_t node_hash_uri(librdf_node *node, librdf_digest *digest)
 {
-    return uri_hash(LIBRDF_NODE_TYPE_RESOURCE == node_type(node) ? librdf_node_get_uri(node) : NULL, digest);
+    return hash_uri(LIBRDF_NODE_TYPE_RESOURCE == node_type(node) ? librdf_node_get_uri(node) : NULL, digest);
 }
 
 
@@ -391,7 +383,7 @@ static inline sqlite_rc_t bind_null(sqlite3_stmt *stmt, const char *name)
 static sqlite_rc_t bind_uri_id(sqlite3_stmt *stmt, librdf_digest *digest, const char *name, librdf_uri *uri, hash_t *value)
 {
     if( uri ) {
-        const hash_t v = uri_hash(uri, digest);
+        const hash_t v = hash_uri(uri, digest);
         if( value ) *value = v;
         return bind_int(stmt, name, v);
     }
@@ -453,41 +445,80 @@ static sqlite_rc_t bind_node_lit_id(sqlite3_stmt *stmt, librdf_digest *digest, c
 }
 
 
-// static sqlite_rc_t bind_text(sqlite3_stmt* stmt, const char*name, librdf_node*node){return SQLITE_ERROR;}
+static sqlite_rc_t bind_stmt(instance_t *db_ctx, librdf_statement *statement, librdf_node *context_node, sqlite3_stmt *stmt)
+{
+    librdf_node *s = librdf_statement_get_subject(statement);
+    librdf_node *p = librdf_statement_get_predicate(statement);
+    librdf_node *o = librdf_statement_get_object(statement);
 
+    sqlite_rc_t rc = SQLITE_OK;
+    hash_t s_uri_id = NULL_ID;
+    hash_t s_blank_id = NULL_ID;
+    hash_t p_uri_id = NULL_ID;
+    hash_t o_uri_id = NULL_ID;
+    hash_t o_blank_id = NULL_ID;
+    hash_t o_lit_id = NULL_ID;
+    hash_t o_type_id = NULL_ID;
+    hash_t c_uri_id = NULL_ID;
+    if( SQLITE_OK != ( rc = bind_node_uri_id(stmt, db_ctx->digest, ":s_uri_id", s, &s_uri_id) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_uri(stmt, ":s_uri", s) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_blank_id(stmt, db_ctx->digest, ":s_blank_id", s, &s_blank_id) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_blank(stmt, ":s_blank", s) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_uri_id(stmt, db_ctx->digest, ":p_uri_id", p, &p_uri_id) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_uri(stmt, ":p_uri", p) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_uri_id(stmt, db_ctx->digest, ":o_uri_id", o, &o_uri_id) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_uri(stmt, ":o_uri", o) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_blank_id(stmt, db_ctx->digest, ":o_blank_id", o, &o_blank_id) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_blank(stmt, ":o_blank", o) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_lit_id(stmt, db_ctx->digest, ":o_lit_id", o, &o_lit_id) ) ) return rc;
+    if( LIBRDF_NODE_TYPE_LITERAL == node_type(o) ) {
+        if( SQLITE_OK != ( rc = bind_uri_id(stmt, db_ctx->digest, ":o_datatype_id", librdf_node_get_literal_value_datatype_uri(o), &o_type_id) ) ) return rc;
+        if( SQLITE_OK != ( rc = bind_uri( stmt, ":o_datatype", librdf_node_get_literal_value_datatype_uri(o) ) ) ) return rc;
+        char *l = librdf_node_get_literal_value_language(o);
+        if( l )
+            if( SQLITE_OK != ( rc = bind_text( stmt, ":o_language", (unsigned char *)l, strlen(l) ) ) ) return rc;
+        size_t len = 0;
+        if( SQLITE_OK != ( rc = bind_text(stmt, ":o_text", librdf_node_get_literal_value_as_counted_string(o, &len), len) ) ) return rc;
+    }
+
+    if( SQLITE_OK != ( rc = bind_node_uri_id(stmt, db_ctx->digest, ":c_uri_id", context_node, &c_uri_id) ) ) return rc;
+    if( SQLITE_OK != ( rc = bind_node_uri(stmt, ":c_uri", context_node) ) ) return rc;
+
+    if( !librdf_statement_is_complete(statement) )
+        return SQLITE_OK;
+
+    hash_t stmt_id = NULL_ID;
+    stmt_id ^= s_uri_id;
+    stmt_id ^= s_blank_id;
+    stmt_id ^= p_uri_id;
+    stmt_id ^= o_uri_id;
+    stmt_id ^= o_blank_id;
+    stmt_id ^= o_lit_id;
+    // stmt_id ^= o_type_id;
+    stmt_id ^= c_uri_id;
+
+    assert(stmt_id == stmt_hash(statement, context_node, db_ctx->digest) && "statement hash compatation mismatch");
+    if( SQLITE_OK != ( rc = bind_int(stmt, ":stmt_id", stmt_id) ) ) return rc;
+
+    return SQLITE_OK;
+}
 
 
 static inline const str_uri_t column_uri_string(sqlite3_stmt *stmt, const int iCol)
 {
-    const str_uri_t ret = (str_uri_t)sqlite3_column_text(stmt, iCol);
-    return isNULL_URI(ret) ? NULL : ret;
+    return (str_uri_t)sqlite3_column_text(stmt, iCol);
 }
 
 
 static inline const str_blank_t column_blank_string(sqlite3_stmt *stmt, const int iCol)
 {
-    const str_blank_t ret = (str_blank_t)sqlite3_column_text(stmt, iCol);
-    return isNULL_BLANK(ret) ? NULL : ret;
+    return (str_blank_t)sqlite3_column_text(stmt, iCol);
 }
 
 
 static inline const str_lang_t column_language(sqlite3_stmt *stmt, const int iCol)
 {
-    const str_lang_t ret = (const str_lang_t)sqlite3_column_text(stmt, iCol);
-    return isNULL_LANG(ret) ? NULL : ret;
-}
-
-
-static hash_t insert(sqlite3 *db, sqlite3_stmt *stmt)
-{
-    const sqlite_rc_t rc3 = sqlite3_step(stmt);
-    if( SQLITE_DONE == rc3 ) {
-        const sqlite3_int64 r = sqlite3_last_insert_rowid(db);
-        const sqlite_rc_t rc2 = sqlite3_reset(stmt);
-        assert(rc2 == SQLITE_OK && "ouch");
-        return (hash_t)r;
-    }
-    return -rc3;
+    return (str_lang_t)sqlite3_column_text(stmt, iCol);
 }
 
 
@@ -598,31 +629,33 @@ static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *reque
 #pragma mark Internal Implementation
 
 
-/** Must match input parameter slots (until PART_C) of lookup_triple_sql and insert_triple_sql
+/** find_triple_sql
  */
 typedef enum {
-    PART_S_U = 0,
-    PART_S_B,
-    PART_P_U,
-    PART_O_U,
-    PART_O_B,
-    PART_O_L,
-    PART_C,
-    PART_DATATYPE, // indirect triple part - literal-datatype.
-    PART_TRIPLE, // not strictly a triple part, reserved if I manage to return parts and triple in one go (either is fine)
+    IDX_S_URI = 9,
+    IDX_S_BLANK,
+    IDX_P_URI,
+    IDX_O_URI,
+    IDX_O_BLANK,
+    IDX_O_TEXT,
+    IDX_O_LANGUAGE,
+    IDX_O_DATATYPE,
+    IDX_C_URI
 }
-part_t;
-
+idx_triple_column_t;
 
 
 static librdf_statement *find_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement, boolean_t create)
 {
     assert(statement && "statement must be set.");
+    assert(librdf_statement_is_complete(statement) && "statement must be complete.");
 
     instance_t *db_ctx = get_instance(storage);
 
     if( !create ) {
         const hash_t stmt_id = stmt_hash(statement, context_node, db_ctx->digest);
+        assert(!isNULL_ID(stmt_id) && "mustn't be nil");
+
         const char *select_triple_sql = "SELECT id FROM triple_relations WHERE id = :stmt_id";
         sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_find), select_triple_sql);
 
@@ -651,56 +684,9 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
                                     ")" "\n" \
     ;
 
-    librdf_node *s = librdf_statement_get_subject(statement);
-    librdf_node *p = librdf_statement_get_predicate(statement);
-    librdf_node *o = librdf_statement_get_object(statement);
-
-    hash_t s_uri_id = NULL_ID;
-    hash_t s_blank_id = NULL_ID;
-    hash_t p_uri_id = NULL_ID;
-    hash_t o_uri_id = NULL_ID;
-    hash_t o_blank_id = NULL_ID;
-    hash_t o_lit_id = NULL_ID;
-    hash_t o_type_id = NULL_ID;
-    hash_t c_uri_id = NULL_ID;
     sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_insert), insert_triple_sql);
-    if( SQLITE_OK != bind_node_uri_id(stmt, db_ctx->digest, ":s_uri_id", s, &s_uri_id) ) return NULL;
-    if( SQLITE_OK != bind_node_uri(stmt, ":s_uri", s) ) return NULL;
-    if( SQLITE_OK != bind_node_blank_id(stmt, db_ctx->digest, ":s_blank_id", s, &s_blank_id) ) return NULL;
-    if( SQLITE_OK != bind_node_blank(stmt, ":s_blank", s) ) return NULL;
-    if( SQLITE_OK != bind_node_uri_id(stmt, db_ctx->digest, ":p_uri_id", p, &p_uri_id) ) return NULL;
-    if( SQLITE_OK != bind_node_uri(stmt, ":p_uri", p) ) return NULL;
-    if( SQLITE_OK != bind_node_uri_id(stmt, db_ctx->digest, ":o_uri_id", o, &o_uri_id) ) return NULL;
-    if( SQLITE_OK != bind_node_uri(stmt, ":o_uri", o) ) return NULL;
-    if( SQLITE_OK != bind_node_blank_id(stmt, db_ctx->digest, ":o_blank_id", o, &o_blank_id) ) return NULL;
-    if( SQLITE_OK != bind_node_blank(stmt, ":o_blank", o) ) return NULL;
-    if( SQLITE_OK != bind_node_lit_id(stmt, db_ctx->digest, ":o_lit_id", o, &o_lit_id) ) return NULL;
-    if( LIBRDF_NODE_TYPE_LITERAL == node_type(o) ) {
-        if( SQLITE_OK != bind_uri_id(stmt, db_ctx->digest, ":o_datatype_id", librdf_node_get_literal_value_datatype_uri(o), &o_type_id) ) return NULL;
-        if( SQLITE_OK != bind_uri( stmt, ":o_datatype", librdf_node_get_literal_value_datatype_uri(o) ) ) return NULL;
-        char *l = librdf_node_get_literal_value_language(o);
-        if( l )
-            if( SQLITE_OK != bind_text( stmt, ":o_language", (unsigned char *)l, strlen(l) ) ) return NULL;
-        size_t len = 0;
-        if( SQLITE_OK != bind_text(stmt, ":o_text", librdf_node_get_literal_value_as_counted_string(o, &len), len) ) return NULL;
-    }
-
-    if( SQLITE_OK != bind_node_uri_id(stmt, db_ctx->digest, ":c_uri_id", context_node, &c_uri_id) ) return NULL;
-    if( SQLITE_OK != bind_node_uri(stmt, ":c_uri", context_node) ) return NULL;
-
-    hash_t stmt_id = NULL_ID;
-    stmt_id ^= s_uri_id;
-    stmt_id ^= s_blank_id;
-    stmt_id ^= p_uri_id;
-    stmt_id ^= o_uri_id;
-    stmt_id ^= o_blank_id;
-    stmt_id ^= o_lit_id;
-    // stmt_id ^= o_type_id;
-    stmt_id ^= c_uri_id;
-
-    assert(stmt_id == stmt_hash(statement, context_node, db_ctx->digest) && "statement hash compatation mismatch");
-    if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) ) return NULL;
-
+    if( SQLITE_OK != bind_stmt(db_ctx, statement, context_node, stmt) )
+        return NULL;
     const sqlite_rc_t rc = sqlite3_step(stmt);
     return SQLITE_DONE == rc ? statement : NULL;
 }
@@ -1122,7 +1108,7 @@ static int pub_iter_end_of_stream(void *_ctx)
 {
     assert(_ctx && "context mustn't be NULL");
     iterator_t *ctx = (iterator_t *)_ctx;
-    return ctx->rc != SQLITE_ROW;
+    return SQLITE_ROW != ctx->rc;
 }
 
 
@@ -1158,11 +1144,11 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
             {
                 /* subject */
                 librdf_node *node = NULL;
-                const str_uri_t uri = column_uri_string(stm, 0);
+                const str_uri_t uri = column_uri_string(stm, IDX_S_URI);
                 if( uri )
                     node = librdf_new_node_from_uri_string(w, uri);
                 if( !node ) {
-                    const str_blank_t blank = column_blank_string(stm, 1);
+                    const str_blank_t blank = column_blank_string(stm, IDX_S_BLANK);
                     if( blank )
                         node = librdf_new_node_from_blank_identifier(w, blank);
                 }
@@ -1173,7 +1159,7 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
             {
                 /* predicate */
                 librdf_node *node = NULL;
-                const str_uri_t uri = column_uri_string(stm, 2);
+                const str_uri_t uri = column_uri_string(stm, IDX_P_URI);
                 if( uri )
                     node = librdf_new_node_from_uri_string(w, uri);
                 if( !node )
@@ -1183,18 +1169,18 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
             {
                 /* object */
                 librdf_node *node = NULL;
-                const str_uri_t uri = column_uri_string(stm, 3);
+                const str_uri_t uri = column_uri_string(stm, IDX_O_URI);
                 if( uri )
                     node = librdf_new_node_from_uri_string(w, uri);
                 if( !node ) {
-                    const str_blank_t blank = column_blank_string(stm, 4);
+                    const str_blank_t blank = column_blank_string(stm, IDX_O_URI);
                     if( blank )
                         node = librdf_new_node_from_blank_identifier(w, blank);
                 }
                 if( !node ) {
-                    const str_lit_val_t val = (str_lit_val_t)sqlite3_column_text(stm, 5);
-                    const str_lang_t lang = (str_lang_t)column_language(stm, 6);
-                    const str_uri_t uri = column_uri_string(stm, 7);
+                    const str_lit_val_t val = (str_lit_val_t)sqlite3_column_text(stm, IDX_O_TEXT);
+                    const str_lang_t lang = (str_lang_t)column_language(stm, IDX_O_LANGUAGE);
+                    const str_uri_t uri = column_uri_string(stm, IDX_O_DATATYPE);
                     librdf_uri *t = uri ? librdf_new_uri(w, uri) : NULL;
                     node = librdf_new_node_from_typed_literal(w, val, lang, t);
                     librdf_free_uri(t);
@@ -1266,11 +1252,11 @@ static int pub_contains_statement(librdf_storage *storage, librdf_statement *sta
 
 static librdf_stream *pub_context_find_statements(librdf_storage *storage, librdf_statement *statement, librdf_node *context_node)
 {
-#if 1
-
+    const sqlite_rc_t begin = transaction_start(storage);
+    instance_t *db_ctx = get_instance(storage);
 
     const char *find_triples_sql = // generated via tools/sql2c.sh find_triples.sql
-                                   " -- result columns must match as used in pub_iter_get_statement" "\n" \
+                                   " -- result columns must match as in enum idx_triple_column_t" "\n" \
                                    "SELECT" "\n" \
                                    " -- all *_id (hashes):" "\n" \
                                    "  id" "\n" \
@@ -1295,43 +1281,15 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
                                    "FROM triples" "\n" \
                                    "WHERE" "\n" \
                                    " -- subject" "\n" \
-                                   "		((:s_uri_id     IS NULL) OR (s_uri_id   = :s_uri_id))""\n" \
-                                   "AND ((:s_blank_id	IS NULL) OR (s_blank_id = :s_blank_id))""\n" \
-                                   "AND ((:p_uri_id     IS NULL) OR (p_uri_id   = :p_uri_id))" "\n" \
+                                   "    ((:s_uri_id   IS NULL) OR (s_uri_id   = :s_uri_id))" "\n" \
+                                   "AND ((:s_blank_id IS NULL) OR (s_blank_id = :s_blank_id))" "\n" \
+                                   "AND ((:p_uri_id   IS NULL) OR (p_uri_id   = :p_uri_id))" "\n" \
                                    " -- object" "\n" \
-                                   "AND ((:o_uri_id     IS NULL) OR (o_uri_id   = :o_uri_id))" "\n" \
-                                   "AND ((:o_blank_id	IS NULL) OR (o_blank_id = :o_blank_id))""\n" \
-                                   "AND ((:o_lit_id	  IS NULL) OR (o_lit_id   = :o_lit_id))" "\n" \
+                                   "AND ((:o_uri_id   IS NULL) OR (o_uri_id   = :o_uri_id))" "\n" \
+                                   "AND ((:o_blank_id IS NULL) OR (o_blank_id = :o_blank_id))" "\n" \
+                                   "AND ((:o_lit_id   IS NULL) OR (o_lit_id   = :o_lit_id))" "\n" \
                                    " -- context node" "\n" \
-                                   "AND ((:c_uri_id     IS NULL) OR (c_uri_id   = :c_uri_id))" "\n" \
-    ;
-
-
-    return NULL;
-#else
-    sqlite_rc_t begin = transaction_start(storage);
-
-    instance_t *db_ctx = get_instance(storage);
-    const char *find_triples_sql = // generated via tools/sql2c.sh find_triples.sql
-                                   "SELECT" "\n" \
-                                   "  s_uri" "\n" \
-                                   "  ,s_blank" "\n" \
-                                   "  ,p_uri" "\n" \
-                                   "  ,o_uri" "\n" \
-                                   "  ,o_blank" "\n" \
-                                   "  ,o_text" "\n" \
-                                   "  ,o_language" "\n" \
-                                   "  ,o_datatype" "\n" \
-                                   "  ,c_uri" "\n" \
-                                   "FROM spocs_full" "\n" \
-                                   "WHERE" "\n" \
-                                   "    ((:s_type != :t_uri)     OR (s_uri = :s_uri))" "\n" \
-                                   "AND ((:s_type != :t_blank)   OR (s_blank = :s_blank))" "\n" \
-                                   "AND ((:p_type != :t_uri)     OR (p_uri = :p_uri))" "\n" \
-                                   "AND ((:o_type != :t_uri)     OR (o_uri = :o_uri))" "\n" \
-                                   "AND ((:o_type != :t_blank)   OR (o_blank = :o_blank))" "\n" \
-                                   "AND ((:o_type != :t_literal) OR (o_text = :o_text AND o_datatype = :o_datatype AND o_language = :o_language))" "\n" \
-                                   "AND ((:c_wild)               OR (c_uri = :c_uri))" "\n" \
+                                   "AND ((:c_uri_id   IS NULL) OR (c_uri_id   = :c_uri_id))" "\n" \
     ;
 
     sqlite3_stmt *stmt = NULL;
@@ -1339,8 +1297,8 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
 
     // librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
 
-    const sqlite_rc_t rc = bind_stmt(stmt, context_node, statement);
-    assert(rc == SQLITE_OK && "foo");
+    const sqlite_rc_t rc = bind_stmt(db_ctx, statement, context_node, stmt);
+    assert(SQLITE_OK == rc && "foo");
 
     // printExplainQueryPlan(stmt);
 
@@ -1360,7 +1318,6 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     librdf_stream *stream = librdf_new_stream(w, iter, &pub_iter_end_of_stream, &pub_iter_next_statement, &pub_iter_get_statement, &pub_iter_finished);
 
     return stream;
-#endif
 }
 
 

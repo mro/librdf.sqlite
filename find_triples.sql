@@ -21,9 +21,20 @@
 -- THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -- 
 
--- result columns must match as used in pub_iter_get_statement
+ -- result columns must match as in enum idx_triple_column_t
 SELECT
-  s_uri
+ -- all *_id (hashes):
+  id
+  ,s_uri_id
+  ,s_blank_id
+  ,p_uri_id
+  ,o_uri_id
+  ,o_blank_id
+  ,o_lit_id
+  ,o_datatype_id
+  ,c_uri_id
+ -- all values:
+  ,s_uri
   ,s_blank
   ,p_uri
   ,o_uri
@@ -32,16 +43,16 @@ SELECT
   ,o_language
   ,o_datatype
   ,c_uri
-FROM spocs_full
+FROM triples
 WHERE
--- subject
-    ((:s_type != :t_uri)     OR (s_uri = :s_uri))
-AND ((:s_type != :t_blank)   OR (s_blank = :s_blank))
+ -- subject
+    ((:s_uri_id   IS NULL) OR (s_uri_id   = :s_uri_id))
+AND ((:s_blank_id IS NULL) OR (s_blank_id = :s_blank_id))
 -- predicate
-AND ((:p_type != :t_uri)     OR (p_uri = :p_uri))
--- object
-AND ((:o_type != :t_uri)     OR (o_uri = :o_uri))
-AND ((:o_type != :t_blank)   OR (o_blank = :o_blank))
-AND ((:o_type != :t_literal) OR (o_text = :o_text AND o_datatype = :o_datatype AND o_language = :o_language))
--- context node
-AND ((:c_wild)               OR (c_uri = :c_uri))
+AND ((:p_uri_id   IS NULL) OR (p_uri_id   = :p_uri_id))
+ -- object
+AND ((:o_uri_id   IS NULL) OR (o_uri_id   = :o_uri_id))
+AND ((:o_blank_id IS NULL) OR (o_blank_id = :o_blank_id))
+AND ((:o_lit_id   IS NULL) OR (o_lit_id   = :o_lit_id))
+ -- context node
+AND ((:c_uri_id   IS NULL) OR (c_uri_id   = :c_uri_id))
