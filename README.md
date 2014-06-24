@@ -30,9 +30,9 @@ See e.g. in my [RedlandDemo fork](https://github.com/mro/RedlandDemo/tree/develo
 | Usability       |           |      |        |     ×      |
 | Efficiency      |     ×     |      |        |            |
 | Changeability   |           |  ×   |        |            |
-| Portability     |           |  ×   |        |            |
+| Portability     |           |      |    ×   |            |
 
-Currently 50% code and 90% runtime saving. But search+delete are yet to come.
+Currently 50% code and 99% runtime saving (for 100k triples).
 
 - intense use of [SQLite prepared statements](https://www.sqlite.org/c3ref/stmt.html) and
   [bound values](https://www.sqlite.org/c3ref/bind_blob.html):

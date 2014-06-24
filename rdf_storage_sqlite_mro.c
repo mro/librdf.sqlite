@@ -226,9 +226,9 @@ static hash_t node_hash_literal(librdf_node *node, librdf_digest *digest)
     if( uri )
         librdf_digest_update(digest, librdf_uri_as_counted_string(uri, &len), len);
 
-    s = (unsigned char *)librdf_node_get_literal_value_language(node);
-    if( s )
-        librdf_digest_update(digest, s, len);
+    const char *l = librdf_node_get_literal_value_language(node);
+    if( l )
+        librdf_digest_update( digest, (unsigned char *)l, strlen(l) );
     return digest_hash(digest);
 }
 
@@ -573,71 +573,10 @@ static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc
 #pragma mark -
 
 
-#pragma mark Legacy
-
-
-static int librdf_storage_sqlite_exec(librdf_storage *storage, const char *request, sqlite3_callback callback, void *arg, boolean_t fail_ok)
-{
-    instance_t *db_ctx = get_instance(storage);
-
-    /* sqlite crashes if passed in a NULL sql string */
-    if( !request )
-        return RET_ERROR;
-
-#if defined(LIBRDF_DEBUG) && LIBRDF_DEBUG > 2
-    LIBRDF_DEBUG2("SQLite exec '%s'\n", request);
-#endif
-
-    char *errmsg = NULL;
-    sqlite_rc_t status = sqlite3_exec(db_ctx->db, (const char *)request, callback, arg, &errmsg);
-    if( fail_ok )
-        status = SQLITE_OK;
-
-    if( SQLITE_OK != status ) {
-        if( SQLITE_LOCKED == status && !callback && db_ctx->in_stream ) {
-            /* error message from sqlite3_exec needs to be freed on both sqlite 2 and 3 */
-            if( errmsg )
-                sqlite3_free(errmsg);
-
-            legacy_query_t *query = LIBRDF_CALLOC( legacy_query_t *, 1, sizeof(*query) );
-            if( !query )
-                return RET_ERROR;
-
-            const size_t query_buf = strlen( (char *)request ) + 1;
-            query->query = LIBRDF_MALLOC(unsigned char *, query_buf);
-            if( !query->query ) {
-                LIBRDF_FREE(legacy_query_t *, query);
-                return RET_ERROR;
-            }
-
-            strncpy( (char *)query->query, (char *)request, query_buf );
-
-            if( !db_ctx->in_stream_queries )
-                db_ctx->in_stream_queries = query;
-            else {
-                legacy_query_t *q = db_ctx->in_stream_queries;
-                while( q->next )
-                    q = q->next;
-                q->next = query;
-            }
-            status = SQLITE_OK;
-        } else {
-            librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL,
-                       "SQLite database %s SQL exec '%s' failed - %s (%d)", db_ctx->name, request, errmsg, status);
-            /* error message from sqlite3_exec needs to be freed on both sqlite 2 and 3 */
-            if( errmsg )
-                sqlite3_free(errmsg);
-        }
-    }
-
-    return SQLITE_OK == status ? RET_OK : RET_ERROR;
-}
-
-
 #pragma mark Internal Implementation
 
 
-/** find_triple_sql
+/** insert_triple_sql
  */
 typedef enum {
     IDX_S_URI = 9,
@@ -664,10 +603,10 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
         const hash_t stmt_id = stmt_hash(statement, context_node, db_ctx->digest);
         assert(!isNULL_ID(stmt_id) && "mustn't be nil");
 
-        const char *select_triple_sql = "SELECT id FROM triple_relations WHERE id = :stmt_id";
-        sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_find), select_triple_sql);
+        sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_find), "SELECT id FROM triple_relations WHERE id = :stmt_id");
 
-        if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) ) return NULL;
+        if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) )
+            return NULL;
         return SQLITE_ROW == sqlite3_step(stmt) ? statement : NULL;
     }
     const char *insert_triple_sql = // generated via tools/sql2c.sh insert_triple.sql
@@ -1228,18 +1167,13 @@ static void pub_iter_finished(void *_ctx)
 
 #pragma mark Query & Iterate
 
-#define TABLE_TRIPLES_NAME "triple_relations"
 
 static int pub_size(librdf_storage *storage)
 {
     instance_t *db_ctx = get_instance(storage);
-    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(id) FROM " TABLE_TRIPLES_NAME);
+    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(id) FROM triple_relations");
     const sqlite_rc_t rc = sqlite3_step(stmt);
-    if( SQLITE_ROW == rc ) {
-        const int ret = sqlite3_column_int(stmt, 0);
-        return (int)ret;
-    }
-    return NULL_ID;
+    return SQLITE_ROW == rc ? sqlite3_column_int(stmt, 0) : 0;
 }
 
 
@@ -1402,10 +1336,10 @@ static int pub_context_remove_statement(librdf_storage *storage, librdf_node *co
     const hash_t stmt_id = stmt_hash(statement, context_node, db_ctx->digest);
     assert(!isNULL_ID(stmt_id) && "mustn't be nil");
 
-    const char *delete_triple_sql = "DELETE FROM triple_relations WHERE id = :stmt_id";
-    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_delete), delete_triple_sql);
+    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_delete), "DELETE FROM triple_relations WHERE id = :stmt_id");
 
-    if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) ) return RET_ERROR;
+    if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) )
+        return RET_ERROR;
     return SQLITE_DONE == sqlite3_step(stmt) ? RET_OK : RET_ERROR;
 }
 
