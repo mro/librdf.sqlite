@@ -237,7 +237,10 @@ static hash_t node_hash_literal(librdf_node *node, librdf_digest *digest)
  */
 static inline hash_t hash_combine(const hash_t seed, const hash_t b)
 {
-    return seed ^ ( b + 0x9e3779b9 + (seed << 6) + (seed >> 2) );
+    // return seed ^ ( b + 0x9e3779b9 + (seed << 6) + (seed >> 2) );
+    // http://stackoverflow.com/a/4948967 and https://stackoverflow.com/questions/4948780/magic-number-in-boosthash-combine#comment35569848_4948967
+    // $ python -c "import math; print hex(int(2**64 / ((1 + math.sqrt(5)) / 2)))"
+    return seed ^ ( b + 0x9e3779b97f4a7800L + (seed << 6) + (seed >> 2) );
 }
 
 
