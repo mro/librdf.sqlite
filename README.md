@@ -6,8 +6,6 @@ Cross platform, plain C source file. Comes with a [![Version](https://img.shield
 
 Inspired by the [official sqlite store](https://github.com/dajobe/librdf/blob/master/src/rdf_storage_sqlite.c).
 
-Considered alpha, *don't use in production*.
-
 ## Usage
 
     #include "rdf_storage_sqlite_mro.h"
@@ -19,7 +17,7 @@ Considered alpha, *don't use in production*.
     const char* options = "new='yes', contexts='no'";
     librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
 
-See e.g. in my [RedlandDemo fork](https://github.com/mro/RedlandDemo/tree/develop).
+See e.g. in (my) <https://github.com/mro/librdf.objc>.
 
 ## Design Goals
 
