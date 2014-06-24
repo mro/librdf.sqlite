@@ -722,6 +722,8 @@ static void pub_terminate(librdf_storage *storage)
 static int pub_close(librdf_storage *storage)
 {
     instance_t *db_ctx = get_instance(storage);
+    if( !db_ctx->db )
+        return RET_OK;
 
     finalize_stmt( &(db_ctx->stmt_txn_start) );
     finalize_stmt( &(db_ctx->stmt_txn_commit) );
@@ -733,33 +735,31 @@ static int pub_close(librdf_storage *storage)
     finalize_stmt( &(db_ctx->stmt_size) );
 
     const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
-    if( SQLITE_OK == rc )
+    if( SQLITE_OK == rc ) {
+        db_ctx->db = NULL;
         return RET_OK;
+    }
     char *errmsg = (char *)sqlite3_errmsg(db_ctx->db);
     librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "SQLite database %s close failed - %s", db_ctx->name, errmsg);
-    return RET_ERROR;
+    return rc;
 }
 
 
 static int pub_open(librdf_storage *storage, librdf_model *model)
 {
     instance_t *db_ctx = get_instance(storage);
-    const boolean_t db_file_exists = 0 == access(db_ctx->name, F_OK);
-    if( db_ctx->is_new && db_file_exists )
+    const boolean_t file_exists = ( 0 == access(db_ctx->name, F_OK) );
+    if( db_ctx->is_new && file_exists )
         unlink(db_ctx->name);
 
     // open DB
     db_ctx->db = NULL;
     {
         const sqlite_rc_t rc = sqlite3_open(db_ctx->name, &db_ctx->db);
-        char *errmsg = NULL;
-        if( SQLITE_OK != rc )
-            errmsg = (char *)sqlite3_errmsg(db_ctx->db);
         if( SQLITE_OK != rc ) {
-            librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL,
-                       "SQLite database %s open failed - %s", db_ctx->name, errmsg);
-            pub_close(storage);
-            return RET_ERROR;
+            const char *errmsg = sqlite3_errmsg(db_ctx->db);
+            librdf_log(get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "SQLite database %s open failed - %s", db_ctx->name, errmsg);
+            return rc;
         }
 
         // http://stackoverflow.com/a/6618833
@@ -772,9 +772,10 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         char sql[250];
         const size_t len = snprintf(sql, sizeof(sql) - 1, "PRAGMA synchronous=%s;", synchronous_flags[db_ctx->synchronous]);
         assert(len < sizeof(sql) && "buffer too small.");
-        if( SQLITE_OK != exec_stmt(db_ctx->db, sql) ) {
+        const sqlite_rc_t rc = exec_stmt(db_ctx->db, sql);
+        if( SQLITE_OK != rc ) {
             pub_close(storage);
-            return RET_ERROR;
+            return rc;
         }
     }
     {
@@ -785,27 +786,29 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
             NULL
         };
         for( int v = 0; sqls[v]; v++ ) {
-            if( SQLITE_OK != exec_stmt(db_ctx->db, sqls[v]) ) {
+            const sqlite_rc_t rc = exec_stmt(db_ctx->db, sqls[v]);
+            if( SQLITE_OK != rc ) {
                 pub_close(storage);
-                return RET_ERROR;
+                return rc;
             }
         }
     }
 
     // check & update schema (run migrations)
     {
+        sqlite_rc_t rc = SQLITE_OK;
         sqlite3_stmt *stmt = NULL;
         prep_stmt(db_ctx->db, &stmt, "PRAGMA user_version;");
-        if( SQLITE_ROW != sqlite3_step(stmt) ) {
+        if( SQLITE_ROW != ( rc = sqlite3_step(stmt) ) ) {
             sqlite3_finalize(stmt);
             pub_close(storage);
-            return RET_ERROR;
+            return rc;
         }
         const int schema_version = sqlite3_column_int(stmt, 0);
-        if( SQLITE_DONE != sqlite3_step(stmt) ) {
+        if( SQLITE_DONE != ( rc = sqlite3_step(stmt) ) ) {
             sqlite3_finalize(stmt);
             pub_close(storage);
-            return RET_ERROR;
+            return rc;
         }
         sqlite3_finalize(stmt);
 
@@ -959,33 +962,33 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         }
         const sqlite_rc_t begin = transaction_start(storage);
         for( int v = schema_version; migrations[v]; v++ ) {
-            if( SQLITE_OK != exec_stmt(db_ctx->db, migrations[v]) ) {
+            if( SQLITE_OK != ( rc = exec_stmt(db_ctx->db, migrations[v]) ) ) {
                 transaction_rollback(storage, begin);
                 pub_close(storage);
-                return RET_ERROR;
+                return rc;
             }
             {
                 // assert new schema version
                 sqlite3_stmt *stmt = NULL;
                 prep_stmt(db_ctx->db, &stmt, "PRAGMA user_version");
-                if( SQLITE_ROW != sqlite3_step(stmt) ) {
+                if( SQLITE_ROW != ( rc = sqlite3_step(stmt) ) ) {
                     sqlite3_finalize(stmt);
                     pub_close(storage);
-                    return RET_ERROR;
+                    return rc;
                 }
                 const int v_new = sqlite3_column_int(stmt, 0);
-                if( SQLITE_DONE != sqlite3_step(stmt) ) {
+                if( SQLITE_DONE != ( rc = sqlite3_step(stmt) ) ) {
                     sqlite3_finalize(stmt);
                     pub_close(storage);
-                    return RET_ERROR;
+                    return rc;
                 }
                 sqlite3_finalize(stmt);
                 assert(v_new == v + 1 && "invalid schema version after migration.");
             }
         }
-        if( SQLITE_OK != transaction_commit(storage, begin) ) {
+        if( SQLITE_OK != ( rc = transaction_commit(storage, begin) ) ) {
             pub_close(storage);
-            return RET_ERROR;
+            return rc;
         }
     }
     return RET_OK;
@@ -1065,12 +1068,12 @@ static int pub_iter_end_of_stream(void *_ctx)
 static int pub_iter_next_statement(void *_ctx)
 {
     assert(_ctx && "context mustn't be NULL");
-    if( pub_iter_end_of_stream(_ctx) )
-        return RET_ERROR;
     iterator_t *ctx = (iterator_t *)_ctx;
+    if( pub_iter_end_of_stream(ctx) )
+        return RET_ERROR;
     ctx->dirty = BOOL_YES;
     ctx->rc = sqlite3_step(ctx->stmt);
-    if( pub_iter_end_of_stream(_ctx) )
+    if( pub_iter_end_of_stream(ctx) )
         return RET_ERROR;
     return RET_OK;
 }
@@ -1342,10 +1345,13 @@ static int pub_context_remove_statement(librdf_storage *storage, librdf_node *co
     assert(!isNULL_ID(stmt_id) && "mustn't be nil");
 
     sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_delete), "DELETE FROM triple_relations WHERE id = :stmt_id");
-
-    if( SQLITE_OK != bind_int(stmt, ":stmt_id", stmt_id) )
-        return RET_ERROR;
-    return SQLITE_DONE == sqlite3_step(stmt) ? RET_OK : RET_ERROR;
+    {
+        const sqlite_rc_t rc = bind_int(stmt, ":stmt_id", stmt_id);
+        if( SQLITE_OK != rc )
+            return rc;
+    }
+    const sqlite_rc_t rc = sqlite3_step(stmt);
+    return SQLITE_DONE == rc ? RET_OK : rc;
 }
 
 
