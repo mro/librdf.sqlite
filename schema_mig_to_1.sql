@@ -28,25 +28,25 @@ PRAGMA encoding = 'UTF-8';
  -- URIs for subjects and objects
 CREATE TABLE so_uris (
   id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space
 );
 
  -- blank node IDs for subjects and objects
 CREATE TABLE so_blanks (
   id INTEGER PRIMARY KEY
-  ,blank TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,blank TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space
 );
 
  -- URIs for predicates
 CREATE TABLE p_uris (
   id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space
 );
 
  -- URIs for literal types
 CREATE TABLE t_uris (
   id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space
 );
 
  -- literal values
@@ -56,12 +56,12 @@ CREATE TABLE o_literals (
   ,language TEXT NULL
   ,text TEXT NOT NULL
 );
--- CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- semantic constraint, could be dropped to save space
+ -- CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- redundant constraint (hash should do), could be dropped to save space
 
  -- URIs for context
 CREATE TABLE c_uris (
   id INTEGER PRIMARY KEY
-  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space
+  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space
 );
 
 CREATE TABLE triple_relations (
@@ -73,19 +73,19 @@ CREATE TABLE triple_relations (
   ,o_blank_id INTEGER NULL      REFERENCES so_blanks(id)
   ,o_lit_id   INTEGER NULL      REFERENCES o_literals(id)
   ,c_uri_id   INTEGER NULL      REFERENCES c_uris(id)
-  , CONSTRAINT null_subject CHECK ( -- ensure uri/blank are mutually exclusively set
+  , CONSTRAINT null_subject CHECK ( -- ensure uri/blank are mutually exclusive
     (s_uri_id IS NOT NULL AND s_blank_id IS NULL) OR
     (s_uri_id IS NULL AND s_blank_id IS NOT NULL)
   )
-  , CONSTRAINT null_object CHECK ( -- ensure uri/blank/literal are mutually exclusively set
+  , CONSTRAINT null_object CHECK ( -- ensure uri/blank/literal are mutually exclusive
     (o_uri_id IS NOT NULL AND o_blank_id IS NULL AND o_lit_id IS NULL) OR
     (o_uri_id IS NULL AND o_blank_id IS NOT NULL AND o_lit_id IS NULL) OR
     (o_uri_id IS NULL AND o_blank_id IS NULL AND o_lit_id IS NOT NULL)
   )
 );
- -- semantic constraint, could be dropped to save space:
--- CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);
--- optional indexes for lookup performance, mostly on DELETE.
+ -- redundant constraint (hash should do), could be dropped to save space:
+ -- CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);
+ -- optional indexes for lookup performance, mostly on DELETE.
 CREATE INDEX triple_relations_index_s_uri_id   ON triple_relations(s_uri_id); -- WHERE s_uri_id IS NOT NULL;
 CREATE INDEX triple_relations_index_s_blank_id ON triple_relations(s_blank_id); -- WHERE s_blank_id IS NOT NULL;
 CREATE INDEX triple_relations_index_p_uri_id   ON triple_relations(p_uri_id); -- WHERE p_uri_id IS NOT NULL;

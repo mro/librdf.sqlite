@@ -822,22 +822,22 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           " -- URIs for subjects and objects" "\n" \
                                           "CREATE TABLE so_uris (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           " -- blank node IDs for subjects and objects" "\n" \
                                           "CREATE TABLE so_blanks (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,blank TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,blank TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           " -- URIs for predicates" "\n" \
                                           "CREATE TABLE p_uris (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           " -- URIs for literal types" "\n" \
                                           "CREATE TABLE t_uris (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           " -- literal values" "\n" \
                                           "CREATE TABLE o_literals (" "\n" \
@@ -846,10 +846,11 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           "  ,language TEXT NULL" "\n" \
                                           "  ,text TEXT NOT NULL" "\n" \
                                           ");" "\n" \
+                                          " -- CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- redundant constraint (hash should do), could be dropped to save space" "\n" \
                                           " -- URIs for context" "\n" \
                                           "CREATE TABLE c_uris (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL -- UNIQUE -- semantic constraint, could be dropped to save space" "\n" \
+                                          "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
                                           ");" "\n" \
                                           "CREATE TABLE triple_relations (" "\n" \
                                           "  id INTEGER PRIMARY KEY" "\n" \
@@ -860,17 +861,19 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           "  ,o_blank_id INTEGER NULL      REFERENCES so_blanks(id)" "\n" \
                                           "  ,o_lit_id   INTEGER NULL      REFERENCES o_literals(id)" "\n" \
                                           "  ,c_uri_id   INTEGER NULL      REFERENCES c_uris(id)" "\n" \
-                                          "  , CONSTRAINT null_subject CHECK ( -- ensure uri/blank are mutually exclusively set" "\n" \
+                                          "  , CONSTRAINT null_subject CHECK ( -- ensure uri/blank are mutually exclusive" "\n" \
                                           "    (s_uri_id IS NOT NULL AND s_blank_id IS NULL) OR" "\n" \
                                           "    (s_uri_id IS NULL AND s_blank_id IS NOT NULL)" "\n" \
                                           "  )" "\n" \
-                                          "  , CONSTRAINT null_object CHECK ( -- ensure uri/blank/literal are mutually exclusively set" "\n" \
+                                          "  , CONSTRAINT null_object CHECK ( -- ensure uri/blank/literal are mutually exclusive" "\n" \
                                           "    (o_uri_id IS NOT NULL AND o_blank_id IS NULL AND o_lit_id IS NULL) OR" "\n" \
                                           "    (o_uri_id IS NULL AND o_blank_id IS NOT NULL AND o_lit_id IS NULL) OR" "\n" \
                                           "    (o_uri_id IS NULL AND o_blank_id IS NULL AND o_lit_id IS NOT NULL)" "\n" \
                                           "  )" "\n" \
                                           ");" "\n" \
-                                          " -- semantic constraint, could be dropped to save space:" "\n" \
+                                          " -- redundant constraint (hash should do), could be dropped to save space:" "\n" \
+                                          " -- CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);" "\n" \
+                                          " -- optional indexes for lookup performance, mostly on DELETE." "\n" \
                                           "CREATE INDEX triple_relations_index_s_uri_id   ON triple_relations(s_uri_id); -- WHERE s_uri_id IS NOT NULL;" "\n" \
                                           "CREATE INDEX triple_relations_index_s_blank_id ON triple_relations(s_blank_id); -- WHERE s_blank_id IS NOT NULL;" "\n" \
                                           "CREATE INDEX triple_relations_index_p_uri_id   ON triple_relations(p_uri_id); -- WHERE p_uri_id IS NOT NULL;" "\n" \
