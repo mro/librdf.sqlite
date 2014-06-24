@@ -233,6 +233,29 @@ static hash_t node_hash_literal(librdf_node *node, librdf_digest *digest)
 }
 
 
+/** https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
+ */
+static inline hash_t hash_combine(const hash_t seed, const hash_t b)
+{
+    return seed ^ ( b + 0x9e3779b9 + (seed << 6) + (seed >> 2) );
+}
+
+
+static hash_t hash_combine_stmt(const hash_t s_uri_id, const hash_t s_blank_id, const hash_t p_uri_id, const hash_t o_uri_id, const hash_t o_blank_id, const hash_t o_lit_id, const hash_t c_uri_id)
+{
+    hash_t stmt_id = NULL_ID;
+    stmt_id = hash_combine(stmt_id, s_uri_id);
+    stmt_id = hash_combine(stmt_id, s_blank_id);
+    stmt_id = hash_combine(stmt_id, p_uri_id);
+    stmt_id = hash_combine(stmt_id, o_uri_id);
+    stmt_id = hash_combine(stmt_id, o_blank_id);
+    stmt_id = hash_combine(stmt_id, o_lit_id);
+    // stmt_id ^= o_type_id;
+    stmt_id = hash_combine(stmt_id, c_uri_id);
+    return stmt_id;
+}
+
+
 static hash_t stmt_hash(librdf_statement *stmt, librdf_node *context_node, librdf_digest *digest)
 {
     if( !stmt )
@@ -242,17 +265,7 @@ static hash_t stmt_hash(librdf_statement *stmt, librdf_node *context_node, librd
     librdf_node *p = librdf_statement_get_predicate(stmt);
     librdf_node *o = librdf_statement_get_object(stmt);
 
-    hash_t stmt_id = NULL_ID;
-    stmt_id = 1 + stmt_id ^ node_hash_uri(s, digest);
-    stmt_id = 1 + stmt_id ^ node_hash_blank(s, digest);
-    stmt_id = 1 + stmt_id ^ node_hash_uri(p, digest);
-    stmt_id = 1 + stmt_id ^ node_hash_uri(o, digest);
-    stmt_id = 1 + stmt_id ^ node_hash_blank(o, digest);
-    stmt_id = 1 + stmt_id ^ node_hash_literal(o, digest);
-    // stmt_id ^= uri_hash(librdf_node_get_literal_value_datatype_uri(o), digest);
-    stmt_id = 1 + stmt_id ^ node_hash_uri(context_node, digest);
-
-    return stmt_id;
+    return hash_combine_stmt( node_hash_uri(s, digest), node_hash_blank(s, digest), node_hash_uri(p, digest), node_hash_uri(o, digest), node_hash_blank(o, digest), node_hash_literal(o, digest), node_hash_uri(context_node, digest) );
 }
 
 
@@ -495,15 +508,7 @@ static sqlite_rc_t bind_stmt(instance_t *db_ctx, librdf_statement *statement, li
     if( !librdf_statement_is_complete(statement) )
         return SQLITE_OK;
 
-    hash_t stmt_id = NULL_ID;
-    stmt_id = 1 + stmt_id ^ s_uri_id;
-    stmt_id = 1 + stmt_id ^ s_blank_id;
-    stmt_id = 1 + stmt_id ^ p_uri_id;
-    stmt_id = 1 + stmt_id ^ o_uri_id;
-    stmt_id = 1 + stmt_id ^ o_blank_id;
-    stmt_id = 1 + stmt_id ^ o_lit_id;
-    // stmt_id ^= o_type_id;
-    stmt_id = 1 + stmt_id ^ c_uri_id;
+    const hash_t stmt_id = hash_combine_stmt(s_uri_id, s_blank_id, p_uri_id, o_uri_id, o_blank_id, o_lit_id, c_uri_id);
 
     assert(stmt_id == stmt_hash(statement, context_node, db_ctx->digest) && "statement hash compatation mismatch");
     if( SQLITE_OK != ( rc = bind_int(stmt, ":stmt_id", stmt_id) ) ) return rc;
