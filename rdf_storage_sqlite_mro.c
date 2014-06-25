@@ -85,26 +85,15 @@ static const char *const synchronous_flags[4] = {
 };
 
 
-typedef struct legacy_query_t legacy_query_t;
-struct legacy_query_t
-{
-    unsigned char *query;
-    legacy_query_t *next;
-};
-
 typedef struct
 {
     sqlite3 *db;
     librdf_digest *digest;
 
     const char *name;
-    size_t name_len;
     boolean_t is_new;
     syncronous_flag_t synchronous;
     boolean_t in_transaction;
-
-    boolean_t in_stream;
-    legacy_query_t *in_stream_queries;
 
     // compiled statements, lazy init
     sqlite3_stmt *stmt_txn_start;
@@ -672,14 +661,14 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
     }
 
     librdf_storage_set_instance(storage, db_ctx);
-    db_ctx->name_len = strlen(name);
-    char *name_copy = LIBRDF_MALLOC(char *, db_ctx->name_len + 1);
+    const size_t name_len = strlen(name);
+    char *name_copy = LIBRDF_MALLOC(char *, name_len + 1);
     if( !name_copy ) {
         free_hash(options);
         return RET_ERROR;
     }
 
-    strncpy(name_copy, name, db_ctx->name_len + 1);
+    strncpy(name_copy, name, name_len + 1);
     db_ctx->name = name_copy;
 
     if( !( db_ctx->digest = librdf_new_digest(get_world(storage), "MD5") ) ) {
