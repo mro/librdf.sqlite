@@ -27,7 +27,7 @@
 
 #include "rdf_storage_sqlite_mro.h"
 
-const char *LIBRDF_STORAGE_SQLITE_MRO = "http://purl.mro.name/rdf/sqlite/mro";
+const char *LIBRDF_STORAGE_SQLITE_MRO = "http://purl.mro.name/rdf/sqlite/";
 
 #include <stdlib.h>
 // #include <stdio.h>
