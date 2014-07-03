@@ -153,7 +153,7 @@ static hash_t digest_hash(librdf_digest *digest)
     const int byte_count = 8;
     const int bit_per_byte = 8;
     assert(byte_count == sizeof(hash_t) && "made for 8-byte (64-bit) hashes");
-    int8_t *diges = (int8_t *)librdf_digest_get_digest(digest);
+    uint8_t *diges = (uint8_t *)librdf_digest_get_digest(digest);
     sqlite3_uint64 ret = 0; // enforce unsigned
     for( int i = byte_count - 1; i >= 0; i-- ) {
         ret <<= bit_per_byte;
