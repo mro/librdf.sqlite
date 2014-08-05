@@ -1339,7 +1339,7 @@ static int pub_context_remove_statement(librdf_storage *storage, librdf_node *co
     const hash_t stmt_id = stmt_hash(statement, context_node, db_ctx->digest);
     assert(!isNULL_ID(stmt_id) && "mustn't be nil");
 
-    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_delete), "DELETE FROM triple_relations WHERE id = :stmt_id");
+    sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_delete), "DELETE FROM triples WHERE id = :stmt_id");
     {
         const sqlite_rc_t rc = bind_int(stmt, ":stmt_id", stmt_id);
         if( SQLITE_OK != rc )
