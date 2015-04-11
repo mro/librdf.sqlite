@@ -1,5 +1,5 @@
 -- 
--- Copyright (c) 2014, Marcus Rohrmoser mobile Software
+-- Copyright (c) 2014-2015, Marcus Rohrmoser mobile Software, http://mro.name/me
 -- All rights reserved.
 -- 
 -- Redistribution and use in source and binary forms, with or without modification, are permitted
