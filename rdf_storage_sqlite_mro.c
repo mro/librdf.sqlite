@@ -171,7 +171,7 @@ static hash_t hash_uri(librdf_uri *uri, librdf_digest *digest)
         return NULL_ID;
     assert(digest && "digest must be set.");
     size_t len = 0;
-    unsigned char *s = librdf_uri_as_counted_string(uri, &len);
+    const unsigned char *s = librdf_uri_as_counted_string(uri, &len);
     assert(s && "uri NULL");
     assert(len && "uri length 0");
     librdf_digest_init(digest);
@@ -213,8 +213,10 @@ static hash_t node_hash_literal(librdf_node *node, librdf_digest *digest)
     librdf_digest_update(digest, s, len);
 
     librdf_uri *uri = librdf_node_get_literal_value_datatype_uri(node);
-    if( uri )
-        librdf_digest_update(digest, librdf_uri_as_counted_string(uri, &len), len);
+    if( uri ) {
+        const unsigned char *str = librdf_uri_as_counted_string(uri, &len);
+        librdf_digest_update(digest, str, len);
+    }
 
     const char *l = librdf_node_get_literal_value_language(node);
     if( l )
@@ -409,7 +411,8 @@ static sqlite_rc_t bind_uri(sqlite3_stmt *stmt, const char *name, librdf_uri *ur
 {
     if( uri ) {
         size_t len = 0;
-        return bind_text(stmt, name, librdf_uri_as_counted_string(uri, &len), len);
+        const unsigned char *str = librdf_uri_as_counted_string(uri, &len);
+        return bind_text(stmt, name, str, len);
     }
     return bind_null(stmt, name);
 }
@@ -442,7 +445,8 @@ static sqlite_rc_t bind_node_blank(sqlite3_stmt *stmt, const char *name, librdf_
 {
     if( LIBRDF_NODE_TYPE_BLANK == node_type(node) ) {
         size_t len = 0;
-        return bind_text(stmt, name, librdf_node_get_counted_blank_identifier(node, &len), len);
+        const unsigned char *str = librdf_node_get_counted_blank_identifier(node, &len);
+        return bind_text(stmt, name, str, len);
     }
     return bind_null(stmt, name);
 }
@@ -492,7 +496,8 @@ static sqlite_rc_t bind_stmt(instance_t *db_ctx, librdf_statement *statement, li
         if( l )
             if( SQLITE_OK != ( rc = bind_text( stmt, ":o_language", (unsigned char *)l, strlen(l) ) ) ) return rc;
         size_t len = 0;
-        if( SQLITE_OK != ( rc = bind_text(stmt, ":o_text", librdf_node_get_literal_value_as_counted_string(o, &len), len) ) ) return rc;
+        const unsigned char *str = librdf_node_get_literal_value_as_counted_string(o, &len);
+        if( SQLITE_OK != ( rc = bind_text(stmt, ":o_text", str, len) ) ) return rc;
     }
 
     if( SQLITE_OK != ( rc = bind_node_uri_id(stmt, db_ctx->digest, ":c_uri_id", context_node, &c_uri_id) ) ) return rc;
