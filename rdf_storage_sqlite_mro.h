@@ -35,6 +35,14 @@
  */
 extern const char *LIBRDF_STORAGE_SQLITE_MRO;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void librdf_init_storage_sqlite_mro(librdf_world *world);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif
