@@ -36,6 +36,7 @@ const char *LIBRDF_STORAGE_SQLITE_MRO = "http://purl.mro.name/rdf/sqlite/";
 #include <redland.h>
 #include <rdf_storage.h>
 #include <sqlite3.h>
+#include <stdint.h>
 
 #if DEBUG
 #undef NDEBUG
