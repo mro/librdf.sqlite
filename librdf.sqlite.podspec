@@ -24,7 +24,7 @@ Considered alpha, *don't use in production*.
 DESC
   s.homepage        = "http://purl.mro.name/rdf/sqlite"
   s.license         = 'Human Rights'
-  s.author          = { "Marcus Rohrmoser" => "mrohrmoser@acm.org" }
+  s.author          = { "Marcus Rohrmoser" => "github@mro.name" }
   s.source          = { :git => "https://github.com/mro/librdf.sqlite.git", :tag => s.version.to_s }
 
   s.requires_arc 		= false
