@@ -948,8 +948,32 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                                           "PRAGMA user_version=1;" "\n" \
         ;
 
+        const char *schema_mig_to_2_sql = // generated via tools/sql2c.sh schema_mig_to_2.sql
+                                          "DROP TRIGGER triples_delete;" "\n" \
+                                          "CREATE TRIGGER triples_delete INSTEAD OF DELETE ON triples" "\n" \
+                                          "FOR EACH ROW BEGIN" "\n" \
+                                          "  -- subject uri/blank" "\n" \
+                                          "  DELETE FROM so_uris    WHERE (OLD.s_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_uri_id    = OLD.s_uri_id))      AND (id = OLD.s_uri_id);" "\n" \
+                                          "  DELETE FROM so_blanks  WHERE (OLD.s_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_blank_id  = OLD.s_blank_id))    AND (id = OLD.s_blank_id);" "\n" \
+                                          "  -- predicate uri" "\n" \
+                                          "  DELETE FROM p_uris     WHERE (OLD.p_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE p_uri_id    = OLD.p_uri_id))      AND (id = OLD.p_uri_id);" "\n" \
+                                          "  -- object uri/blank" "\n" \
+                                          "  DELETE FROM so_uris    WHERE (OLD.o_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_uri_id    = OLD.o_uri_id))      AND (id = OLD.o_uri_id);" "\n" \
+                                          "  DELETE FROM so_blanks  WHERE (OLD.o_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_blank_id  = OLD.o_blank_id))    AND (id = OLD.o_blank_id);" "\n" \
+                                          "  -- object literal" "\n" \
+                                          "  DELETE FROM o_literals WHERE (OLD.o_lit_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_lit_id    = OLD.o_lit_id))      AND (id = OLD.o_lit_id);" "\n" \
+                                          "  DELETE FROM t_uris     WHERE (OLD.o_datatype_id IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM o_literals       WHERE datatype_id = OLD.o_datatype_id)) AND (id = OLD.o_datatype_id);" "\n" \
+                                          "  -- context uri" "\n" \
+                                          "  DELETE FROM c_uris     WHERE (OLD.c_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE c_uri_id    = OLD.c_uri_id))      AND (id = OLD.c_uri_id);" "\n" \
+                                          "  -- triple" "\n" \
+                                          "  DELETE FROM triple_relations WHERE id = OLD.id;" "\n" \
+                                          "END;" "\n" \
+                                          "PRAGMA user_version=2;" "\n" \
+        ;
+
         const char *const migrations[] = {
             schema_mig_to_1_sql,
+            schema_mig_to_2_sql,
             NULL
         };
         {
