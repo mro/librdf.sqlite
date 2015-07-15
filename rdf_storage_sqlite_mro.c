@@ -275,10 +275,10 @@ static hash_t stmt_hash(librdf_statement *stmt, librdf_node *context_node, librd
 static int printExplainQueryPlan(sqlite3_stmt *pStmt)
 {
     const char *zSql = sqlite3_sql(pStmt);
-    if( zSql == 0 ) return SQLITE_ERROR;
+    if( NULL == zSql ) return SQLITE_ERROR;
 
     char *zExplain = sqlite3_mprintf("EXPLAIN QUERY PLAN %s", zSql);
-    if( 0 == zExplain ) return SQLITE_NOMEM;
+    if( NULL == zExplain ) return SQLITE_NOMEM;
 
     sqlite3_stmt *pExplain; /* Compiled EXPLAIN QUERY PLAN command */
     const int rc = sqlite3_prepare_v2(sqlite3_db_handle(pStmt), zExplain, -1, &pExplain, 0);
@@ -345,7 +345,7 @@ static sqlite3_stmt *prep_stmt(sqlite3 *db, sqlite3_stmt **stmt_p, const char *z
         const int len_zSql = (int)strlen(zSql) + 1;
         const sqlite_rc_t rc0 = log_error( db, zSql, sqlite3_prepare_v2(db, zSql, len_zSql, stmt_p, &remainder) );
         assert(SQLITE_OK == rc0 && "couldn't compile SQL statement");
-        assert(*remainder == '\0' && "had remainder");
+        assert('\0' == *remainder && "had remainder");
     }
     assert(*stmt_p && "statement is NULL");
     return *stmt_p;
@@ -386,7 +386,7 @@ static inline sqlite_rc_t bind_text(sqlite3_stmt *stmt, const char *name, const 
     assert(stmt && "stmt mandatory");
     assert(name && "name mandatory");
     const int idx = sqlite3_bind_parameter_index(stmt, name);
-    return 0 == idx ? SQLITE_OK : ( text == NULL ? sqlite3_bind_null(stmt, idx) : sqlite3_bind_text(stmt, idx, (const char *)text, (int)text_len, SQLITE_STATIC) );
+    return 0 == idx ? SQLITE_OK : ( NULL == text ? sqlite3_bind_null(stmt, idx) : sqlite3_bind_text(stmt, idx, (const char *)text, (int)text_len, SQLITE_STATIC) );
 }
 
 
@@ -508,7 +508,7 @@ static sqlite_rc_t bind_stmt(instance_t *db_ctx, librdf_statement *statement, li
 
     const hash_t stmt_id = hash_combine_stmt(s_uri_id, s_blank_id, p_uri_id, o_uri_id, o_blank_id, o_lit_id, c_uri_id);
 
-    assert(stmt_id == stmt_hash(statement, context_node, db_ctx->digest) && "statement hash compatation mismatch");
+    assert(stmt_hash(statement, context_node, db_ctx->digest) == stmt_id && "statement hash compatation mismatch");
     if( SQLITE_OK != ( rc = bind_int(stmt, ":stmt_id", stmt_id) ) ) return rc;
 
     return SQLITE_OK;
@@ -554,7 +554,7 @@ static sqlite_rc_t transaction_commit(librdf_storage *storage, const sqlite_rc_t
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_commit), "COMMIT  TRANSACTION;") );
     db_ctx->in_transaction = !(SQLITE_DONE == rc);
-    assert(db_ctx->in_transaction == BOOL_NO && "ouch");
+    assert(BOOL_NO == db_ctx->in_transaction && "ouch");
     return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
@@ -568,7 +568,7 @@ static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_rollback), "ROLLBACK TRANSACTION;") );
     db_ctx->in_transaction = !(SQLITE_DONE == rc);
-    assert(db_ctx->in_transaction == BOOL_NO && "ouch");
+    assert(BOOL_NO == db_ctx->in_transaction && "ouch");
     return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
@@ -707,7 +707,7 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
 static void pub_terminate(librdf_storage *storage)
 {
     instance_t *db_ctx = get_instance(storage);
-    if( db_ctx == NULL )
+    if( NULL == db_ctx )
         return;
     if( db_ctx->name )
         LIBRDF_FREE(char *, (void *)db_ctx->name);
@@ -1008,7 +1008,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
                     return rc;
                 }
                 sqlite3_finalize(stmt);
-                assert(v_new == v + 1 && "invalid schema version after migration.");
+                assert(v + 1 == v_new && "invalid schema version after migration.");
             }
         }
         if( SQLITE_OK != ( rc = transaction_commit(storage, begin) ) ) {
