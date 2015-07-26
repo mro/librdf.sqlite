@@ -1151,7 +1151,7 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
                 if( uri )
                     node = librdf_new_node_from_uri_string(w, uri);
                 if( !node ) {
-                    const str_blank_t blank = column_blank_string(stm, IDX_O_URI);
+                    const str_blank_t blank = column_blank_string(stm, IDX_O_BLANK);
                     if( blank )
                         node = librdf_new_node_from_blank_identifier(w, blank);
                 }
