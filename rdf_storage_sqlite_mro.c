@@ -1336,7 +1336,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
         | (context_node ? P_C_URI : 0)
     ;
     assert(params <= ALL_PARAMS && "params bitmask overflow");
-    assert(params < sizeof(db_ctx->stmt_triple_finds) && "statement cache array overflow");
+    assert(params < sizeof(db_ctx->stmt_triple_finds) / sizeof(db_ctx->stmt_triple_finds[0]) && "statement cache array overflow");
 
     const int idx = params; // might become more complex to save some memory in db_ctx->stmt_triple_finds - see https://github.com/mro/librdf.sqlite/issues/11#issuecomment-151959176
     sqlite3_stmt *stmt = db_ctx->stmt_triple_finds[idx];
