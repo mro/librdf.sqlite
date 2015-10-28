@@ -27,7 +27,7 @@
 
 #include "rdf_storage_sqlite_mro.h"
 
-const char *LIBRDF_STORAGE_SQLITE_MRO = "http://purl.mro.name/rdf/sqlite/";
+const char *LIBRDF_STORAGE_SQLITE_MRO = LIBRDF_STORAGE_SQLITE_MRO_;
 
 #include <stdlib.h>
 // #include <stdio.h>
@@ -85,26 +85,43 @@ static const char *const synchronous_flags[4] = {
     "off", "normal", "full", NULL
 };
 
+typedef enum {
+    P_S_URI       = 1<<0,
+    P_S_BLANK     = 1<<1,
+    P_P_URI       = 1<<2,
+    P_O_URI       = 1<<3,
+    P_O_BLANK     = 1<<4,
+    P_O_TEXT      = 1<<5,
+    P_O_LANGUAGE  = 1<<6,
+    P_O_DATATYPE  = 1<<7,
+    P_C_URI       = 1<<8
+} sql_find_param_t;
+
 
 typedef struct
 {
-    sqlite3 *db;
-    librdf_digest *digest;
+    sqlite3           *db;
+    librdf_digest     *digest;
 
-    const char *name;
-    boolean_t is_new;
+    const char        *name;
+    boolean_t         is_new;
     syncronous_flag_t synchronous;
-    boolean_t in_transaction;
+    boolean_t         in_transaction;
+
+    boolean_t         do_profile;
+    sql_find_param_t  sql_cache_mask;
 
     // compiled statements, lazy init
-    sqlite3_stmt *stmt_txn_start;
-    sqlite3_stmt *stmt_txn_commit;
-    sqlite3_stmt *stmt_txn_rollback;
-    sqlite3_stmt *stmt_triple_find;
-    sqlite3_stmt *stmt_triple_insert;
-    sqlite3_stmt *stmt_triple_delete;
+    sqlite3_stmt      *stmt_txn_start;
+    sqlite3_stmt      *stmt_txn_commit;
+    sqlite3_stmt      *stmt_txn_rollback;
+    sqlite3_stmt      *stmt_triple_find;
+    sqlite3_stmt      *stmt_triple_insert;
+    sqlite3_stmt      *stmt_triple_delete;
 
-    sqlite3_stmt *stmt_size;
+    sqlite3_stmt      *stmt_size;
+
+    sqlite3_stmt      *stmt_triple_finds[P_C_URI];
 }
 instance_t;
 
@@ -301,15 +318,14 @@ static int printExplainQueryPlan(sqlite3_stmt *pStmt)
 // http://stackoverflow.com/a/6618833
 static void trace(void *context, const char *sql)
 {
-    fprintf(stderr, "Query: %s\n", sql);
+    fprintf(stderr, "Query SQL: %s\n", sql);
 }
 
 
 // http://stackoverflow.com/a/6618833
 static void profile(void *context, const char *sql, const sqlite3_uint64 ns)
 {
-    fprintf(stderr, "Query: %s\n", sql);
-    fprintf(stderr, "Execution Time: %llu ms\n", ns / 1000000);
+    fprintf(stderr, "dt=%llu ms Query SQL: %s\n", ns / 1000000, sql);
 }
 
 
@@ -579,7 +595,7 @@ static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc
 #pragma mark Internal Implementation
 
 
-/** insert_triple_sql
+/** insert_triple_sql + find_triples_sql
  */
 typedef enum {
     IDX_S_URI = 9,
@@ -637,6 +653,12 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
     sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_insert), insert_triple_sql);
     if( SQLITE_OK != bind_stmt(db_ctx, statement, context_node, stmt) )
         return NULL;
+
+    if(BOOL_NO) {
+      // toggle via "profile" feature?
+      printExplainQueryPlan(stmt);
+    }
+
     const sqlite_rc_t rc = sqlite3_step(stmt);
     return SQLITE_DONE == rc ? statement : NULL;
 }
@@ -746,6 +768,7 @@ static int pub_close(librdf_storage *storage)
 static int pub_open(librdf_storage *storage, librdf_model *model)
 {
     instance_t *db_ctx = get_instance(storage);
+
     const boolean_t file_exists = ( 0 == access(db_ctx->name, F_OK) );
     if( db_ctx->is_new && file_exists )
         unlink(db_ctx->name);
@@ -761,8 +784,10 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         }
 
         // http://stackoverflow.com/a/6618833
-        // sqlite3_profile(db_ctx->db, &profile, NULL);
-        // sqlite3_profile(db_ctx->db, &trace, NULL);
+        if( db_ctx->do_profile ) {
+          sqlite3_profile(db_ctx->db, &profile, NULL);
+          // sqlite3_trace(db_ctx->db, &trace, NULL);
+        }
     }
 
     // set DB session PRAGMAs
@@ -1034,12 +1059,74 @@ static librdf_node *pub_get_feature(librdf_storage *storage, librdf_uri *feature
 {
     if( !feature )
         return NULL;
-    const unsigned char *uri_string = librdf_uri_as_string(feature);
-    if( !uri_string )
+    const unsigned char *feat = librdf_uri_as_string(feature);
+    if( !feat )
         return NULL;
-    if( !strncmp( (const char *)uri_string, LIBRDF_MODEL_FEATURE_CONTEXTS, sizeof(LIBRDF_MODEL_FEATURE_CONTEXTS) + 1 ) )
-        return librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"1", NULL, NULL);
-    return NULL;
+    librdf_node *ret = NULL;
+    librdf_uri *uri_xsd_boolean = librdf_new_uri(get_world(storage), (const unsigned char *)"http://www.w3.org/2000/10/XMLSchema#" "boolean");
+    librdf_uri *uri_xsd_unsignedShort = librdf_new_uri(get_world(storage), "http://www.w3.org/2000/10/XMLSchema#" "unsignedShort");
+    if( !ret && 0 == strcmp( LIBRDF_MODEL_FEATURE_CONTEXTS, (const char *)feat) )
+        ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"0", NULL, uri_xsd_boolean);
+    if( !ret && 0 == strcmp( LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", (const char *)feat) ) {
+        ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"1023", NULL, uri_xsd_unsignedShort);
+    }
+    if( !ret && 0 == strcmp( LIBRDF_STORAGE_SQLITE_MRO_ "feature/profile", (const char *)feat) ) {
+        ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"1", NULL, uri_xsd_unsignedShort);
+    }
+    librdf_free_uri(uri_xsd_boolean);
+    librdf_free_uri(uri_xsd_unsignedShort);
+    return ret;
+}
+
+
+/**
+ * librdf_storage_set_feature:
+ * @storage: #librdf_storage object
+ * @feature: #librdf_uri feature property
+ * @value: #librdf_node feature property value
+ *
+ * Set the value of a storage feature.
+ *
+ * Return value: non 0 on failure (negative if no such feature)
+ **/
+static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_node *value)
+{
+    if( !feature )
+        return -1;
+    const unsigned char *feat = librdf_uri_as_string(feature);
+    if( !feat )
+        return -1;
+    instance_t *db_ctx = get_instance(storage);
+
+    if( 0 == strcmp( LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", feat) ) {
+      const char *val = librdf_node_get_literal_value(value);
+      if( 0 == strcmp( "0", val ) ) {
+        db_ctx->sql_cache_mask = 0;
+      } else {
+        const int i = atoi(val);
+        if( 0 >= i ) {
+          librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:unsignedShort", feat, val);
+          return 3;
+        }
+        db_ctx->sql_cache_mask = ((P_C_URI<<1) - 1ul) & i; // clip range
+      }
+      librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "good value: <%s> \"%d\"^^xsd:unsignedShort", feat, db_ctx->sql_cache_mask);
+      return 0;
+    }
+
+    if( 0 == strcmp( LIBRDF_STORAGE_SQLITE_MRO_ "feature/profile", feat) ) {
+      const char *val = librdf_node_get_literal_value(value);
+      if( 0 == strcmp( "1", val ) || 0 == strcmp( "true", val ) )
+        db_ctx->do_profile = BOOL_YES;
+      else if( 0 == strcmp( "0", val ) || 0 == strcmp( "false", val ) )
+        db_ctx->do_profile = BOOL_NO;
+      else {
+        librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:boolean", feat, val);
+        return 2;
+      }
+      return 0;
+    }
+    return 1;
 }
 
 
@@ -1267,13 +1354,19 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
 
     sqlite3_stmt *stmt = NULL;
     stmt = prep_stmt(db_ctx->db, &stmt, find_triples_sql);
-
-    // librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
-
+/*
+    if( BOOL_NO ) {
+      // toggle via "profile" feature?
+      librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
+    }
+*/
     const sqlite_rc_t rc = bind_stmt(db_ctx, statement, context_node, stmt);
     assert(SQLITE_OK == rc && "foo");
 
-    // printExplainQueryPlan(stmt);
+    if(BOOL_NO) {
+      // toggle via "profile" feature?
+      printExplainQueryPlan(stmt);
+    }
 
     librdf_world *w = get_world(storage);
     // create iterator
@@ -1431,6 +1524,7 @@ static void register_factory(librdf_storage_factory *factory)
     factory->find_statements_in_context = pub_context_find_statements;
     factory->get_contexts               = pub_get_contexts;
     factory->get_feature                = pub_get_feature;
+    factory->set_feature                = pub_set_feature;
     factory->transaction_start          = pub_transaction_start;
     factory->transaction_commit         = pub_transaction_commit;
     factory->transaction_rollback       = pub_transaction_rollback;

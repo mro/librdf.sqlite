@@ -33,6 +33,7 @@
 /** Factory name.
  *
  */
+#define LIBRDF_STORAGE_SQLITE_MRO_ "http://purl.mro.name/rdf/sqlite/"
 extern const char *LIBRDF_STORAGE_SQLITE_MRO;
 
 #ifdef __cplusplus
