@@ -45,7 +45,7 @@ if [[ "$@" == "" ]]
 then
 	echo "Got no files on commandline (which is fine), so I'll format those:"
 	# PROJECT_SOURCE=$(find Classes* -name "*.m" -or -name "*.h")
-	PROJECT_SOURCE=$(ls *_mro.?)
+	PROJECT_SOURCE=$(ls *_mro.? demo/*.c)
 else
 	PROJECT_SOURCE="$@"
 fi
