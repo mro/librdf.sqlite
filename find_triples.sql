@@ -44,15 +44,15 @@ SELECT
   ,o_datatype
   ,c_uri
 FROM triples
-WHERE
+WHERE 1
  -- subject
-    ((:s_uri_id   IS NULL) OR (s_uri_id   = :s_uri_id))
-AND ((:s_blank_id IS NULL) OR (s_blank_id = :s_blank_id))
+AND s_uri_id   = :s_uri_id
+AND s_blank_id = :s_blank_id
 -- predicate
-AND ((:p_uri_id   IS NULL) OR (p_uri_id   = :p_uri_id))
+AND p_uri_id   = :p_uri_id
  -- object
-AND ((:o_uri_id   IS NULL) OR (o_uri_id   = :o_uri_id))
-AND ((:o_blank_id IS NULL) OR (o_blank_id = :o_blank_id))
-AND ((:o_lit_id   IS NULL) OR (o_lit_id   = :o_lit_id))
+AND o_uri_id   = :o_uri_id
+AND o_blank_id = :o_blank_id
+AND o_lit_id   = :o_lit_id
  -- context node
-AND ((:c_uri_id   IS NULL) OR (c_uri_id   = :c_uri_id))
+AND c_uri_id   = :c_uri_id

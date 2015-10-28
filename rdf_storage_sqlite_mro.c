@@ -116,13 +116,13 @@ typedef struct
     sqlite3_stmt      *stmt_txn_start;
     sqlite3_stmt      *stmt_txn_commit;
     sqlite3_stmt      *stmt_txn_rollback;
-    sqlite3_stmt      *stmt_triple_find;
+    sqlite3_stmt      *stmt_triple_find;    // complete triples
     sqlite3_stmt      *stmt_triple_insert;
     sqlite3_stmt      *stmt_triple_delete;
 
     sqlite3_stmt      *stmt_size;
 
-    sqlite3_stmt      *stmt_triple_finds[ALL_PARAMS];
+    sqlite3_stmt      *stmt_triple_finds[ALL_PARAMS]; // sparse triples
 }
 instance_t;
 
@@ -1319,45 +1319,93 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     const sqlite_rc_t begin = transaction_start(storage);
     instance_t *db_ctx = get_instance(storage);
 
-    const char *find_triples_sql = // generated via tools/sql2c.sh find_triples.sql
-                                   " -- result columns must match as in enum idx_triple_column_t" "\n" \
-                                   "SELECT" "\n" \
-                                   " -- all *_id (hashes):" "\n" \
-                                   "  id" "\n" \
-                                   "  ,s_uri_id" "\n" \
-                                   "  ,s_blank_id" "\n" \
-                                   "  ,p_uri_id" "\n" \
-                                   "  ,o_uri_id" "\n" \
-                                   "  ,o_blank_id" "\n" \
-                                   "  ,o_lit_id" "\n" \
-                                   "  ,o_datatype_id" "\n" \
-                                   "  ,c_uri_id" "\n" \
-                                   " -- all values:" "\n" \
-                                   "  ,s_uri" "\n" \
-                                   "  ,s_blank" "\n" \
-                                   "  ,p_uri" "\n" \
-                                   "  ,o_uri" "\n" \
-                                   "  ,o_blank" "\n" \
-                                   "  ,o_text" "\n" \
-                                   "  ,o_language" "\n" \
-                                   "  ,o_datatype" "\n" \
-                                   "  ,c_uri" "\n" \
-                                   "FROM triples" "\n" \
-                                   "WHERE" "\n" \
-                                   " -- subject" "\n" \
-                                   "    ((:s_uri_id   IS NULL) OR (s_uri_id   = :s_uri_id))" "\n" \
-                                   "AND ((:s_blank_id IS NULL) OR (s_blank_id = :s_blank_id))" "\n" \
-                                   "AND ((:p_uri_id   IS NULL) OR (p_uri_id   = :p_uri_id))" "\n" \
-                                   " -- object" "\n" \
-                                   "AND ((:o_uri_id   IS NULL) OR (o_uri_id   = :o_uri_id))" "\n" \
-                                   "AND ((:o_blank_id IS NULL) OR (o_blank_id = :o_blank_id))" "\n" \
-                                   "AND ((:o_lit_id   IS NULL) OR (o_lit_id   = :o_lit_id))" "\n" \
-                                   " -- context node" "\n" \
-                                   "AND ((:c_uri_id   IS NULL) OR (c_uri_id   = :c_uri_id))" "\n" \
-    ;
+    librdf_node *s = librdf_statement_get_subject(statement);
+    librdf_node *p = librdf_statement_get_predicate(statement);
+    librdf_node *o = librdf_statement_get_object(statement);
 
-    sqlite3_stmt *stmt = NULL;
-    stmt = prep_stmt(db_ctx->db, &stmt, find_triples_sql);
+    // build the bitmask of parameters to set (non-NULL)
+    const int params =
+      (LIBRDF_NODE_TYPE_RESOURCE   == node_type(s) ? P_S_URI : 0)
+      | (LIBRDF_NODE_TYPE_BLANK    == node_type(s) ? P_S_BLANK : 0)
+      | (LIBRDF_NODE_TYPE_RESOURCE == node_type(p) ? P_P_URI : 0)
+      | (LIBRDF_NODE_TYPE_RESOURCE == node_type(o) ? P_P_URI : 0)
+      | (LIBRDF_NODE_TYPE_BLANK    == node_type(o) ? P_O_BLANK : 0)
+      | (LIBRDF_NODE_TYPE_LITERAL  == node_type(o) ? P_O_TEXT : 0)
+      | (librdf_node_get_literal_value_datatype_uri(o) ? P_O_DATATYPE : 0)
+      | (librdf_node_get_literal_value_language(o) ? P_O_LANGUAGE : 0)
+      | (context_node ? P_C_URI : 0)
+    ;
+    assert( params <= ALL_PARAMS && "params bitmask overflow");
+    assert( params < sizeof() && "statement cache array overflow");
+
+    const int idx = params; // might become more complex to save some memory in db_ctx->stmt_triple_finds - see https://github.com/mro/librdf.sqlite/issues/11#issuecomment-151959176
+    sqlite3_stmt *stmt = db_ctx->stmt_triple_finds[idx];
+    if( NULL == stmt ) {
+        const char *find_triples_sql = // generated via tools/sql2c.sh find_triples.sql
+        " -- result columns must match as in enum idx_triple_column_t" "\n" \
+        "SELECT" "\n" \
+        " -- all *_id (hashes):" "\n" \
+        "  id" "\n" \
+        "  ,s_uri_id" "\n" \
+        "  ,s_blank_id" "\n" \
+        "  ,p_uri_id" "\n" \
+        "  ,o_uri_id" "\n" \
+        "  ,o_blank_id" "\n" \
+        "  ,o_lit_id" "\n" \
+        "  ,o_datatype_id" "\n" \
+        "  ,c_uri_id" "\n" \
+        " -- all values:" "\n" \
+        "  ,s_uri" "\n" \
+        "  ,s_blank" "\n" \
+        "  ,p_uri" "\n" \
+        "  ,o_uri" "\n" \
+        "  ,o_blank" "\n" \
+        "  ,o_text" "\n" \
+        "  ,o_language" "\n" \
+        "  ,o_datatype" "\n" \
+        "  ,c_uri" "\n" \
+        "FROM triples" "\n" \
+        "WHERE 1" "\n" \
+        " -- subject" "\n" \
+        "AND s_uri_id   = :s_uri_id" "\n" \
+        "AND s_blank_id = :s_blank_id" "\n" \
+        "AND p_uri_id   = :p_uri_id" "\n" \
+        " -- object" "\n" \
+        "AND o_uri_id   = :o_uri_id" "\n" \
+        "AND o_blank_id = :o_blank_id" "\n" \
+        "AND o_lit_id   = :o_lit_id" "\n" \
+        " -- context node" "\n" \
+        "AND c_uri_id   = :c_uri_id" "\n" \
+        ;
+
+        // create a SQL working copy (on stack) to fiddle with
+        char sql[sizeof(find_triples_sql)+1];
+        strcpy(sql, find_triples_sql);
+        // SQL-comment out the NULL parameter terms
+        if( 0 == (P_S_URI & params) )
+          strcpy(strstr(sql, "AND s_uri_id"), "-- ");
+        assert( '-' != sql[0] && "'AND s_uri_id' not found in find_triples.sql");
+        if( 0 == (P_S_BLANK & params) )
+          strcpy(strstr(sql, "AND s_blank_id"), "-- ");
+        assert( '-' != sql[0] && "'AND s_blank_id' not found in find_triples.sql");
+        if( 0 == (P_P_URI & params) )
+          strcpy(strstr(sql, "AND p_uri_id"), "-- ");
+        assert( '-' != sql[0] && "'AND p_uri_id' not found in find_triples.sql");
+        if( 0 == (P_O_URI & params) )
+          strcpy(strstr(sql, "AND o_uri_id"), "-- ");
+        assert( '-' != sql[0] && "'AND o_uri_id' not found in find_triples.sql");
+        if( 0 == (P_O_BLANK & params) )
+          strcpy(strstr(sql, "AND o_blank_id"), "-- ");
+        assert( '-' != sql[0] && "'AND o_blank_id' not found in find_triples.sql");
+        if( 0 == (P_O_TEXT & params) )
+          strcpy(strstr(sql, "AND o_lit_id"), "-- ");
+        assert( '-' != sql[0] && "'AND o_lit_id' not found in find_triples.sql");
+        if( 0 == (P_C_URI & params) )
+          strcpy(strstr(sql, "AND c_uri_id"), "-- ");
+        assert( '-' != sql[0] && "'AND c_uri_id' not found in find_triples.sql");
+
+        stmt = db_ctx->stmt_triple_finds[idx] = prep_stmt(db_ctx->db, &stmt, sql);
+    }
 /*
     if( BOOL_NO ) {
       // toggle via "profile" feature?
