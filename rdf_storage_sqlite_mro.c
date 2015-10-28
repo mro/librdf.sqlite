@@ -97,6 +97,7 @@ typedef enum {
     P_C_URI       = 1<<8
 } sql_find_param_t;
 
+#define ALL_PARAMS (P_C_URI<<1)
 
 typedef struct
 {
@@ -121,7 +122,7 @@ typedef struct
 
     sqlite3_stmt      *stmt_size;
 
-    sqlite3_stmt      *stmt_triple_finds[P_C_URI];
+    sqlite3_stmt      *stmt_triple_finds[ALL_PARAMS];
 }
 instance_t;
 
@@ -754,6 +755,9 @@ static int pub_close(librdf_storage *storage)
 
     finalize_stmt( &(db_ctx->stmt_size) );
 
+    for( int i = ALL_PARAMS-1; i >= 0; i-- )
+      finalize_stmt( &(db_ctx->stmt_triple_finds[i]) );
+
     const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
     if( SQLITE_OK == rc ) {
         db_ctx->db = NULL;
@@ -1108,7 +1112,7 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
           librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:unsignedShort", feat, val);
           return 3;
         }
-        db_ctx->sql_cache_mask = ((P_C_URI<<1) - 1ul) & i; // clip range
+        db_ctx->sql_cache_mask = (ALL_PARAMS-1) & i; // clip range
       }
       librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "good value: <%s> \"%d\"^^xsd:unsignedShort", feat, db_ctx->sql_cache_mask);
       return 0;
