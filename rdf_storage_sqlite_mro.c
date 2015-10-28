@@ -1324,8 +1324,8 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     librdf_node *o = librdf_statement_get_object(statement);
 
     // build the bitmask of parameters to set (non-NULL)
-    const int params =
-        (LIBRDF_NODE_TYPE_RESOURCE == node_type(s) ? P_S_URI : 0)
+    const int params = 0
+        | (LIBRDF_NODE_TYPE_RESOURCE == node_type(s) ? P_S_URI : 0)
         | (LIBRDF_NODE_TYPE_BLANK == node_type(s) ? P_S_BLANK : 0)
         | (LIBRDF_NODE_TYPE_RESOURCE == node_type(p) ? P_P_URI : 0)
         | (LIBRDF_NODE_TYPE_RESOURCE == node_type(o) ? P_P_URI : 0)
@@ -1383,25 +1383,25 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
         strcpy(sql, find_triples_sql);
         // SQL-comment out the NULL parameter terms
         if( 0 == (P_S_URI & params) )
-            strcpy(strstr(sql, "AND s_uri_id"), "-- ");
+            strncpy(strstr(sql, "AND s_uri_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND s_uri_id' not found in find_triples.sql");
         if( 0 == (P_S_BLANK & params) )
-            strcpy(strstr(sql, "AND s_blank_id"), "-- ");
+            strncpy(strstr(sql, "AND s_blank_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND s_blank_id' not found in find_triples.sql");
         if( 0 == (P_P_URI & params) )
-            strcpy(strstr(sql, "AND p_uri_id"), "-- ");
+            strncpy(strstr(sql, "AND p_uri_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND p_uri_id' not found in find_triples.sql");
         if( 0 == (P_O_URI & params) )
-            strcpy(strstr(sql, "AND o_uri_id"), "-- ");
+            strncpy(strstr(sql, "AND o_uri_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND o_uri_id' not found in find_triples.sql");
         if( 0 == (P_O_BLANK & params) )
-            strcpy(strstr(sql, "AND o_blank_id"), "-- ");
+            strncpy(strstr(sql, "AND o_blank_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND o_blank_id' not found in find_triples.sql");
         if( 0 == (P_O_TEXT & params) )
-            strcpy(strstr(sql, "AND o_lit_id"), "-- ");
+            strncpy(strstr(sql, "AND o_lit_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND o_lit_id' not found in find_triples.sql");
         if( 0 == (P_C_URI & params) )
-            strcpy(strstr(sql, "AND c_uri_id"), "-- ");
+            strncpy(strstr(sql, "AND c_uri_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND c_uri_id' not found in find_triples.sql");
 
         librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Created SQL statement #%d %s", idx, sql);
