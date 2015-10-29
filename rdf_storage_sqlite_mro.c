@@ -45,6 +45,7 @@ const char *LIBRDF_STORAGE_SQLITE_MRO = LIBRDF_STORAGE_SQLITE_MRO_;
 #endif
 #include <assert.h>
 
+#define array_length(a) ( sizeof(a) / sizeof( (a)[0] ) )
 
 #pragma mark Basic Types & Constants
 
@@ -629,26 +630,26 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
             return NULL;
         return SQLITE_ROW == sqlite3_step(stmt) ? statement : NULL;
     }
-    const char *insert_triple_sql = // generated via tools/sql2c.sh insert_triple.sql
-                                    "INSERT OR IGNORE INTO triples(" "\n" \
-                                    "  id," "\n" \
-                                    "  s_uri_id, s_uri," "\n" \
-                                    "  s_blank_id, s_blank," "\n" \
-                                    "  p_uri_id, p_uri," "\n" \
-                                    "  o_uri_id, o_uri," "\n" \
-                                    "  o_blank_id, o_blank," "\n" \
-                                    "  o_lit_id, o_datatype_id, o_datatype, o_language, o_text," "\n" \
-                                    "  c_uri_id, c_uri" "\n" \
-                                    ") VALUES (" "\n" \
-                                    "  :stmt_id," "\n" \
-                                    "  :s_uri_id, :s_uri," "\n" \
-                                    "  :s_blank_id, :s_blank," "\n" \
-                                    "  :p_uri_id, :p_uri," "\n" \
-                                    "  :o_uri_id, :o_uri," "\n" \
-                                    "  :o_blank_id, :o_blank," "\n" \
-                                    "  :o_lit_id, :o_datatype_id, :o_datatype, :o_language, :o_text," "\n" \
-                                    "  :c_uri_id, :c_uri" "\n" \
-                                    ")" "\n" \
+    const char insert_triple_sql[] = // generated via tools/sql2c.sh insert_triple.sql
+                                     "INSERT OR IGNORE INTO triples(" "\n" \
+                                     "  id," "\n" \
+                                     "  s_uri_id, s_uri," "\n" \
+                                     "  s_blank_id, s_blank," "\n" \
+                                     "  p_uri_id, p_uri," "\n" \
+                                     "  o_uri_id, o_uri," "\n" \
+                                     "  o_blank_id, o_blank," "\n" \
+                                     "  o_lit_id, o_datatype_id, o_datatype, o_language, o_text," "\n" \
+                                     "  c_uri_id, c_uri" "\n" \
+                                     ") VALUES (" "\n" \
+                                     "  :stmt_id," "\n" \
+                                     "  :s_uri_id, :s_uri," "\n" \
+                                     "  :s_blank_id, :s_blank," "\n" \
+                                     "  :p_uri_id, :p_uri," "\n" \
+                                     "  :o_uri_id, :o_uri," "\n" \
+                                     "  :o_blank_id, :o_blank," "\n" \
+                                     "  :o_lit_id, :o_datatype_id, :o_datatype, :o_language, :o_text," "\n" \
+                                     "  :c_uri_id, :c_uri" "\n" \
+                                     ")" "\n" \
     ;
 
     sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_triple_insert), insert_triple_sql);
@@ -839,165 +840,165 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         }
         sqlite3_finalize(stmt);
 
-        const char *schema_mig_to_1_sql = // generated via tools/sql2c.sh schema_mig_to_1.sql
-                                          "PRAGMA foreign_keys = ON;" "\n" \
-                                          "PRAGMA recursive_triggers = ON;" "\n" \
-                                          "PRAGMA encoding = 'UTF-8';" "\n" \
-                                          " -- URIs for subjects and objects" "\n" \
-                                          "CREATE TABLE so_uris (" "\n" \
-                                          "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
-                                          ");" "\n" \
-                                          " -- blank node IDs for subjects and objects" "\n" \
-                                          "CREATE TABLE so_blanks (" "\n" \
-                                          "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,blank TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
-                                          ");" "\n" \
-                                          " -- URIs for predicates" "\n" \
-                                          "CREATE TABLE p_uris (" "\n" \
-                                          "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
-                                          ");" "\n" \
-                                          " -- URIs for literal types" "\n" \
-                                          "CREATE TABLE t_uris (" "\n" \
-                                          "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
-                                          ");" "\n" \
-                                          " -- literal values" "\n" \
-                                          "CREATE TABLE o_literals (" "\n" \
-                                          "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,datatype_id INTEGER NULL REFERENCES t_uris(id)" "\n" \
-                                          "  ,language TEXT NULL" "\n" \
-                                          "  ,text TEXT NOT NULL" "\n" \
-                                          ");" "\n" \
-                                          " -- CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- redundant constraint (hash should do), could be dropped to save space" "\n" \
-                                          " -- URIs for context" "\n" \
-                                          "CREATE TABLE c_uris (" "\n" \
-                                          "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
-                                          ");" "\n" \
-                                          "CREATE TABLE triple_relations (" "\n" \
-                                          "  id INTEGER PRIMARY KEY" "\n" \
-                                          "  ,s_uri_id   INTEGER NULL      REFERENCES so_uris(id)" "\n" \
-                                          "  ,s_blank_id INTEGER NULL      REFERENCES so_blanks(id)" "\n" \
-                                          "  ,p_uri_id   INTEGER NOT NULL  REFERENCES p_uris(id)" "\n" \
-                                          "  ,o_uri_id   INTEGER NULL      REFERENCES so_uris(id)" "\n" \
-                                          "  ,o_blank_id INTEGER NULL      REFERENCES so_blanks(id)" "\n" \
-                                          "  ,o_lit_id   INTEGER NULL      REFERENCES o_literals(id)" "\n" \
-                                          "  ,c_uri_id   INTEGER NULL      REFERENCES c_uris(id)" "\n" \
-                                          "  , CONSTRAINT null_subject CHECK ( -- ensure uri/blank are mutually exclusive" "\n" \
-                                          "    (s_uri_id IS NOT NULL AND s_blank_id IS NULL) OR" "\n" \
-                                          "    (s_uri_id IS NULL AND s_blank_id IS NOT NULL)" "\n" \
-                                          "  )" "\n" \
-                                          "  , CONSTRAINT null_object CHECK ( -- ensure uri/blank/literal are mutually exclusive" "\n" \
-                                          "    (o_uri_id IS NOT NULL AND o_blank_id IS NULL AND o_lit_id IS NULL) OR" "\n" \
-                                          "    (o_uri_id IS NULL AND o_blank_id IS NOT NULL AND o_lit_id IS NULL) OR" "\n" \
-                                          "    (o_uri_id IS NULL AND o_blank_id IS NULL AND o_lit_id IS NOT NULL)" "\n" \
-                                          "  )" "\n" \
-                                          ");" "\n" \
-                                          " -- redundant constraint (hash should do), could be dropped to save space:" "\n" \
-                                          " -- CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);" "\n" \
-                                          " -- optional indexes for lookup performance, mostly on DELETE." "\n" \
-                                          "CREATE INDEX triple_relations_index_s_uri_id   ON triple_relations(s_uri_id); -- WHERE s_uri_id IS NOT NULL;" "\n" \
-                                          "CREATE INDEX triple_relations_index_s_blank_id ON triple_relations(s_blank_id); -- WHERE s_blank_id IS NOT NULL;" "\n" \
-                                          "CREATE INDEX triple_relations_index_p_uri_id   ON triple_relations(p_uri_id); -- WHERE p_uri_id IS NOT NULL;" "\n" \
-                                          "CREATE INDEX triple_relations_index_o_uri_id   ON triple_relations(o_uri_id); -- WHERE o_uri_id IS NOT NULL;" "\n" \
-                                          "CREATE INDEX triple_relations_index_o_blank_id ON triple_relations(o_blank_id); -- WHERE s_blank_id IS NOT NULL;" "\n" \
-                                          "CREATE INDEX triple_relations_index_o_lit_id   ON triple_relations(o_lit_id); -- WHERE o_lit_id IS NOT NULL;" "\n" \
-                                          "CREATE INDEX o_literals_index_datatype_id      ON o_literals(datatype_id); -- WHERE datatype_id IS NOT NULL;" "\n" \
-                                          "CREATE VIEW triples AS" "\n" \
-                                          "SELECT" "\n" \
-                                          "  -- all *_id (hashes):" "\n" \
-                                          "  triple_relations.id AS id" "\n" \
-                                          "  ,s_uri_id" "\n" \
-                                          "  ,s_blank_id" "\n" \
-                                          "  ,p_uri_id" "\n" \
-                                          "  ,o_uri_id" "\n" \
-                                          "  ,o_blank_id" "\n" \
-                                          "  ,o_lit_id" "\n" \
-                                          "  ,o_literals.datatype_id AS o_datatype_id" "\n" \
-                                          "  ,c_uri_id" "\n" \
-                                          "  -- all joined values:" "\n" \
-                                          "  ,s_uris.uri      AS s_uri" "\n" \
-                                          "  ,s_blanks.blank  AS s_blank" "\n" \
-                                          "  ,p_uris.uri      AS p_uri" "\n" \
-                                          "  ,o_uris.uri      AS o_uri" "\n" \
-                                          "  ,o_blanks.blank  AS o_blank" "\n" \
-                                          "  ,o_literals.text AS o_text" "\n" \
-                                          "  ,o_literals.language AS o_language" "\n" \
-                                          "  ,o_lit_uris.uri  AS o_datatype" "\n" \
-                                          "  ,c_uris.uri      AS c_uri" "\n" \
-                                          "FROM triple_relations" "\n" \
-                                          "LEFT OUTER JOIN so_uris    AS s_uris     ON triple_relations.s_uri_id   = s_uris.id" "\n" \
-                                          "LEFT OUTER JOIN so_blanks  AS s_blanks   ON triple_relations.s_blank_id = s_blanks.id" "\n" \
-                                          "INNER      JOIN p_uris     AS p_uris     ON triple_relations.p_uri_id   = p_uris.id" "\n" \
-                                          "LEFT OUTER JOIN so_uris    AS o_uris     ON triple_relations.o_uri_id   = o_uris.id" "\n" \
-                                          "LEFT OUTER JOIN so_blanks  AS o_blanks   ON triple_relations.o_blank_id = o_blanks.id" "\n" \
-                                          "LEFT OUTER JOIN o_literals AS o_literals ON triple_relations.o_lit_id   = o_literals.id" "\n" \
-                                          "LEFT OUTER JOIN t_uris     AS o_lit_uris ON o_literals.datatype_id      = o_lit_uris.id" "\n" \
-                                          "LEFT OUTER JOIN c_uris     AS c_uris     ON triple_relations.c_uri_id   = c_uris.id" "\n" \
-                                          ";" "\n" \
-                                          "CREATE TRIGGER triples_insert INSTEAD OF INSERT ON triples" "\n" \
-                                          "FOR EACH ROW BEGIN" "\n" \
-                                          "  -- subject uri/blank" "\n" \
-                                          "  INSERT OR IGNORE INTO so_uris   (id,uri)   VALUES (NEW.s_uri_id,      NEW.s_uri);" "\n" \
-                                          "  INSERT OR IGNORE INTO so_blanks (id,blank) VALUES (NEW.s_blank_id,    NEW.s_blank);" "\n" \
-                                          "  -- predicate uri" "\n" \
-                                          "  INSERT OR IGNORE INTO p_uris    (id,uri)   VALUES (NEW.p_uri_id,      NEW.p_uri);" "\n" \
-                                          "  -- object uri/blank" "\n" \
-                                          "  INSERT OR IGNORE INTO so_uris   (id,uri)   VALUES (NEW.o_uri_id,      NEW.o_uri);" "\n" \
-                                          "  INSERT OR IGNORE INTO so_blanks (id,blank) VALUES (NEW.o_blank_id,    NEW.o_blank);" "\n" \
-                                          "  -- object literal" "\n" \
-                                          "  INSERT OR IGNORE INTO t_uris    (id,uri)   VALUES (NEW.o_datatype_id, NEW.o_datatype);" "\n" \
-                                          "  INSERT OR IGNORE INTO o_literals(id,datatype_id,language,text) VALUES (NEW.o_lit_id, NEW.o_datatype_id, NEW.o_language, NEW.o_text);" "\n" \
-                                          "  -- context uri" "\n" \
-                                          "  INSERT OR IGNORE INTO c_uris    (id,uri)   VALUES (NEW.c_uri_id,      NEW.c_uri);" "\n" \
-                                          "  -- triple" "\n" \
-                                          "  INSERT INTO triple_relations(id, s_uri_id, s_blank_id, p_uri_id, o_uri_id, o_blank_id, o_lit_id, c_uri_id)" "\n" \
-                                          "  VALUES (NEW.id, NEW.s_uri_id, NEW.s_blank_id, NEW.p_uri_id, NEW.o_uri_id, NEW.o_blank_id, NEW.o_lit_id, NEW.c_uri_id);" "\n" \
-                                          "END;" "\n" \
-                                          "CREATE TRIGGER triples_delete INSTEAD OF DELETE ON triples" "\n" \
-                                          "FOR EACH ROW BEGIN" "\n" \
-                                          "  -- triple" "\n" \
-                                          "  DELETE FROM triple_relations WHERE id = OLD.id;" "\n" \
-                                          "  -- subject uri/blank" "\n" \
-                                          "  DELETE FROM so_uris    WHERE (OLD.s_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_uri_id    = OLD.s_uri_id))      AND (id = OLD.s_uri_id);" "\n" \
-                                          "  DELETE FROM so_blanks  WHERE (OLD.s_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_blank_id  = OLD.s_blank_id))    AND (id = OLD.s_blank_id);" "\n" \
-                                          "  -- predicate uri" "\n" \
-                                          "  DELETE FROM p_uris     WHERE (OLD.p_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE p_uri_id    = OLD.p_uri_id))      AND (id = OLD.p_uri_id);" "\n" \
-                                          "  -- object uri/blank" "\n" \
-                                          "  DELETE FROM so_uris    WHERE (OLD.o_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_uri_id    = OLD.o_uri_id))      AND (id = OLD.o_uri_id);" "\n" \
-                                          "  DELETE FROM so_blanks  WHERE (OLD.o_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_blank_id  = OLD.o_blank_id))    AND (id = OLD.o_blank_id);" "\n" \
-                                          "  -- object literal" "\n" \
-                                          "  DELETE FROM o_literals WHERE (OLD.o_lit_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_lit_id    = OLD.o_lit_id))      AND (id = OLD.o_lit_id);" "\n" \
-                                          "  DELETE FROM t_uris     WHERE (OLD.o_datatype_id IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM o_literals       WHERE datatype_id = OLD.o_datatype_id)) AND (id = OLD.o_datatype_id);" "\n" \
-                                          "  -- context uri" "\n" \
-                                          "  DELETE FROM c_uris     WHERE (OLD.c_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE c_uri_id    = OLD.c_uri_id))      AND (id = OLD.c_uri_id);" "\n" \
-                                          "END;" "\n" \
-                                          "PRAGMA user_version=1;" "\n" \
+        const char schema_mig_to_1_sql[] = // generated via tools/sql2c.sh schema_mig_to_1.sql
+                                           "PRAGMA foreign_keys = ON;" "\n" \
+                                           "PRAGMA recursive_triggers = ON;" "\n" \
+                                           "PRAGMA encoding = 'UTF-8';" "\n" \
+                                           " -- URIs for subjects and objects" "\n" \
+                                           "CREATE TABLE so_uris (" "\n" \
+                                           "  id INTEGER PRIMARY KEY" "\n" \
+                                           "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
+                                           ");" "\n" \
+                                           " -- blank node IDs for subjects and objects" "\n" \
+                                           "CREATE TABLE so_blanks (" "\n" \
+                                           "  id INTEGER PRIMARY KEY" "\n" \
+                                           "  ,blank TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
+                                           ");" "\n" \
+                                           " -- URIs for predicates" "\n" \
+                                           "CREATE TABLE p_uris (" "\n" \
+                                           "  id INTEGER PRIMARY KEY" "\n" \
+                                           "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
+                                           ");" "\n" \
+                                           " -- URIs for literal types" "\n" \
+                                           "CREATE TABLE t_uris (" "\n" \
+                                           "  id INTEGER PRIMARY KEY" "\n" \
+                                           "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
+                                           ");" "\n" \
+                                           " -- literal values" "\n" \
+                                           "CREATE TABLE o_literals (" "\n" \
+                                           "  id INTEGER PRIMARY KEY" "\n" \
+                                           "  ,datatype_id INTEGER NULL REFERENCES t_uris(id)" "\n" \
+                                           "  ,language TEXT NULL" "\n" \
+                                           "  ,text TEXT NOT NULL" "\n" \
+                                           ");" "\n" \
+                                           " -- CREATE UNIQUE INDEX o_literals_index ON o_literals (text,language,datatype_id); -- redundant constraint (hash should do), could be dropped to save space" "\n" \
+                                           " -- URIs for context" "\n" \
+                                           "CREATE TABLE c_uris (" "\n" \
+                                           "  id INTEGER PRIMARY KEY" "\n" \
+                                           "  ,uri TEXT NOT NULL -- UNIQUE -- redundant constraint (hash should do), could be dropped to save space" "\n" \
+                                           ");" "\n" \
+                                           "CREATE TABLE triple_relations (" "\n" \
+                                           "  id INTEGER PRIMARY KEY" "\n" \
+                                           "  ,s_uri_id   INTEGER NULL      REFERENCES so_uris(id)" "\n" \
+                                           "  ,s_blank_id INTEGER NULL      REFERENCES so_blanks(id)" "\n" \
+                                           "  ,p_uri_id   INTEGER NOT NULL  REFERENCES p_uris(id)" "\n" \
+                                           "  ,o_uri_id   INTEGER NULL      REFERENCES so_uris(id)" "\n" \
+                                           "  ,o_blank_id INTEGER NULL      REFERENCES so_blanks(id)" "\n" \
+                                           "  ,o_lit_id   INTEGER NULL      REFERENCES o_literals(id)" "\n" \
+                                           "  ,c_uri_id   INTEGER NULL      REFERENCES c_uris(id)" "\n" \
+                                           "  , CONSTRAINT null_subject CHECK ( -- ensure uri/blank are mutually exclusive" "\n" \
+                                           "    (s_uri_id IS NOT NULL AND s_blank_id IS NULL) OR" "\n" \
+                                           "    (s_uri_id IS NULL AND s_blank_id IS NOT NULL)" "\n" \
+                                           "  )" "\n" \
+                                           "  , CONSTRAINT null_object CHECK ( -- ensure uri/blank/literal are mutually exclusive" "\n" \
+                                           "    (o_uri_id IS NOT NULL AND o_blank_id IS NULL AND o_lit_id IS NULL) OR" "\n" \
+                                           "    (o_uri_id IS NULL AND o_blank_id IS NOT NULL AND o_lit_id IS NULL) OR" "\n" \
+                                           "    (o_uri_id IS NULL AND o_blank_id IS NULL AND o_lit_id IS NOT NULL)" "\n" \
+                                           "  )" "\n" \
+                                           ");" "\n" \
+                                           " -- redundant constraint (hash should do), could be dropped to save space:" "\n" \
+                                           " -- CREATE UNIQUE INDEX triple_relations_index     ON triple_relations(s_uri_id,s_blank_id,p_uri_id,o_uri_id,o_blank_id,o_lit_id,c_uri_id);" "\n" \
+                                           " -- optional indexes for lookup performance, mostly on DELETE." "\n" \
+                                           "CREATE INDEX triple_relations_index_s_uri_id   ON triple_relations(s_uri_id); -- WHERE s_uri_id IS NOT NULL;" "\n" \
+                                           "CREATE INDEX triple_relations_index_s_blank_id ON triple_relations(s_blank_id); -- WHERE s_blank_id IS NOT NULL;" "\n" \
+                                           "CREATE INDEX triple_relations_index_p_uri_id   ON triple_relations(p_uri_id); -- WHERE p_uri_id IS NOT NULL;" "\n" \
+                                           "CREATE INDEX triple_relations_index_o_uri_id   ON triple_relations(o_uri_id); -- WHERE o_uri_id IS NOT NULL;" "\n" \
+                                           "CREATE INDEX triple_relations_index_o_blank_id ON triple_relations(o_blank_id); -- WHERE s_blank_id IS NOT NULL;" "\n" \
+                                           "CREATE INDEX triple_relations_index_o_lit_id   ON triple_relations(o_lit_id); -- WHERE o_lit_id IS NOT NULL;" "\n" \
+                                           "CREATE INDEX o_literals_index_datatype_id      ON o_literals(datatype_id); -- WHERE datatype_id IS NOT NULL;" "\n" \
+                                           "CREATE VIEW triples AS" "\n" \
+                                           "SELECT" "\n" \
+                                           "  -- all *_id (hashes):" "\n" \
+                                           "  triple_relations.id AS id" "\n" \
+                                           "  ,s_uri_id" "\n" \
+                                           "  ,s_blank_id" "\n" \
+                                           "  ,p_uri_id" "\n" \
+                                           "  ,o_uri_id" "\n" \
+                                           "  ,o_blank_id" "\n" \
+                                           "  ,o_lit_id" "\n" \
+                                           "  ,o_literals.datatype_id AS o_datatype_id" "\n" \
+                                           "  ,c_uri_id" "\n" \
+                                           "  -- all joined values:" "\n" \
+                                           "  ,s_uris.uri      AS s_uri" "\n" \
+                                           "  ,s_blanks.blank  AS s_blank" "\n" \
+                                           "  ,p_uris.uri      AS p_uri" "\n" \
+                                           "  ,o_uris.uri      AS o_uri" "\n" \
+                                           "  ,o_blanks.blank  AS o_blank" "\n" \
+                                           "  ,o_literals.text AS o_text" "\n" \
+                                           "  ,o_literals.language AS o_language" "\n" \
+                                           "  ,o_lit_uris.uri  AS o_datatype" "\n" \
+                                           "  ,c_uris.uri      AS c_uri" "\n" \
+                                           "FROM triple_relations" "\n" \
+                                           "LEFT OUTER JOIN so_uris    AS s_uris     ON triple_relations.s_uri_id   = s_uris.id" "\n" \
+                                           "LEFT OUTER JOIN so_blanks  AS s_blanks   ON triple_relations.s_blank_id = s_blanks.id" "\n" \
+                                           "INNER      JOIN p_uris     AS p_uris     ON triple_relations.p_uri_id   = p_uris.id" "\n" \
+                                           "LEFT OUTER JOIN so_uris    AS o_uris     ON triple_relations.o_uri_id   = o_uris.id" "\n" \
+                                           "LEFT OUTER JOIN so_blanks  AS o_blanks   ON triple_relations.o_blank_id = o_blanks.id" "\n" \
+                                           "LEFT OUTER JOIN o_literals AS o_literals ON triple_relations.o_lit_id   = o_literals.id" "\n" \
+                                           "LEFT OUTER JOIN t_uris     AS o_lit_uris ON o_literals.datatype_id      = o_lit_uris.id" "\n" \
+                                           "LEFT OUTER JOIN c_uris     AS c_uris     ON triple_relations.c_uri_id   = c_uris.id" "\n" \
+                                           ";" "\n" \
+                                           "CREATE TRIGGER triples_insert INSTEAD OF INSERT ON triples" "\n" \
+                                           "FOR EACH ROW BEGIN" "\n" \
+                                           "  -- subject uri/blank" "\n" \
+                                           "  INSERT OR IGNORE INTO so_uris   (id,uri)   VALUES (NEW.s_uri_id,      NEW.s_uri);" "\n" \
+                                           "  INSERT OR IGNORE INTO so_blanks (id,blank) VALUES (NEW.s_blank_id,    NEW.s_blank);" "\n" \
+                                           "  -- predicate uri" "\n" \
+                                           "  INSERT OR IGNORE INTO p_uris    (id,uri)   VALUES (NEW.p_uri_id,      NEW.p_uri);" "\n" \
+                                           "  -- object uri/blank" "\n" \
+                                           "  INSERT OR IGNORE INTO so_uris   (id,uri)   VALUES (NEW.o_uri_id,      NEW.o_uri);" "\n" \
+                                           "  INSERT OR IGNORE INTO so_blanks (id,blank) VALUES (NEW.o_blank_id,    NEW.o_blank);" "\n" \
+                                           "  -- object literal" "\n" \
+                                           "  INSERT OR IGNORE INTO t_uris    (id,uri)   VALUES (NEW.o_datatype_id, NEW.o_datatype);" "\n" \
+                                           "  INSERT OR IGNORE INTO o_literals(id,datatype_id,language,text) VALUES (NEW.o_lit_id, NEW.o_datatype_id, NEW.o_language, NEW.o_text);" "\n" \
+                                           "  -- context uri" "\n" \
+                                           "  INSERT OR IGNORE INTO c_uris    (id,uri)   VALUES (NEW.c_uri_id,      NEW.c_uri);" "\n" \
+                                           "  -- triple" "\n" \
+                                           "  INSERT INTO triple_relations(id, s_uri_id, s_blank_id, p_uri_id, o_uri_id, o_blank_id, o_lit_id, c_uri_id)" "\n" \
+                                           "  VALUES (NEW.id, NEW.s_uri_id, NEW.s_blank_id, NEW.p_uri_id, NEW.o_uri_id, NEW.o_blank_id, NEW.o_lit_id, NEW.c_uri_id);" "\n" \
+                                           "END;" "\n" \
+                                           "CREATE TRIGGER triples_delete INSTEAD OF DELETE ON triples" "\n" \
+                                           "FOR EACH ROW BEGIN" "\n" \
+                                           "  -- triple" "\n" \
+                                           "  DELETE FROM triple_relations WHERE id = OLD.id;" "\n" \
+                                           "  -- subject uri/blank" "\n" \
+                                           "  DELETE FROM so_uris    WHERE (OLD.s_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_uri_id    = OLD.s_uri_id))      AND (id = OLD.s_uri_id);" "\n" \
+                                           "  DELETE FROM so_blanks  WHERE (OLD.s_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_blank_id  = OLD.s_blank_id))    AND (id = OLD.s_blank_id);" "\n" \
+                                           "  -- predicate uri" "\n" \
+                                           "  DELETE FROM p_uris     WHERE (OLD.p_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE p_uri_id    = OLD.p_uri_id))      AND (id = OLD.p_uri_id);" "\n" \
+                                           "  -- object uri/blank" "\n" \
+                                           "  DELETE FROM so_uris    WHERE (OLD.o_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_uri_id    = OLD.o_uri_id))      AND (id = OLD.o_uri_id);" "\n" \
+                                           "  DELETE FROM so_blanks  WHERE (OLD.o_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_blank_id  = OLD.o_blank_id))    AND (id = OLD.o_blank_id);" "\n" \
+                                           "  -- object literal" "\n" \
+                                           "  DELETE FROM o_literals WHERE (OLD.o_lit_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_lit_id    = OLD.o_lit_id))      AND (id = OLD.o_lit_id);" "\n" \
+                                           "  DELETE FROM t_uris     WHERE (OLD.o_datatype_id IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM o_literals       WHERE datatype_id = OLD.o_datatype_id)) AND (id = OLD.o_datatype_id);" "\n" \
+                                           "  -- context uri" "\n" \
+                                           "  DELETE FROM c_uris     WHERE (OLD.c_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE c_uri_id    = OLD.c_uri_id))      AND (id = OLD.c_uri_id);" "\n" \
+                                           "END;" "\n" \
+                                           "PRAGMA user_version=1;" "\n" \
         ;
 
-        const char *schema_mig_to_2_sql = // generated via tools/sql2c.sh schema_mig_to_2.sql
-                                          "DROP TRIGGER triples_delete;" "\n" \
-                                          "CREATE TRIGGER triples_delete INSTEAD OF DELETE ON triples" "\n" \
-                                          "FOR EACH ROW BEGIN" "\n" \
-                                          "  -- subject uri/blank" "\n" \
-                                          "  DELETE FROM so_uris    WHERE (OLD.s_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_uri_id    = OLD.s_uri_id))      AND (id = OLD.s_uri_id);" "\n" \
-                                          "  DELETE FROM so_blanks  WHERE (OLD.s_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_blank_id  = OLD.s_blank_id))    AND (id = OLD.s_blank_id);" "\n" \
-                                          "  -- predicate uri" "\n" \
-                                          "  DELETE FROM p_uris     WHERE (OLD.p_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE p_uri_id    = OLD.p_uri_id))      AND (id = OLD.p_uri_id);" "\n" \
-                                          "  -- object uri/blank" "\n" \
-                                          "  DELETE FROM so_uris    WHERE (OLD.o_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_uri_id    = OLD.o_uri_id))      AND (id = OLD.o_uri_id);" "\n" \
-                                          "  DELETE FROM so_blanks  WHERE (OLD.o_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_blank_id  = OLD.o_blank_id))    AND (id = OLD.o_blank_id);" "\n" \
-                                          "  -- object literal" "\n" \
-                                          "  DELETE FROM o_literals WHERE (OLD.o_lit_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_lit_id    = OLD.o_lit_id))      AND (id = OLD.o_lit_id);" "\n" \
-                                          "  DELETE FROM t_uris     WHERE (OLD.o_datatype_id IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM o_literals       WHERE datatype_id = OLD.o_datatype_id)) AND (id = OLD.o_datatype_id);" "\n" \
-                                          "  -- context uri" "\n" \
-                                          "  DELETE FROM c_uris     WHERE (OLD.c_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE c_uri_id    = OLD.c_uri_id))      AND (id = OLD.c_uri_id);" "\n" \
-                                          "  -- triple" "\n" \
-                                          "  DELETE FROM triple_relations WHERE id = OLD.id;" "\n" \
-                                          "END;" "\n" \
-                                          "PRAGMA user_version=2;" "\n" \
+        const char schema_mig_to_2_sql[] = // generated via tools/sql2c.sh schema_mig_to_2.sql
+                                           "DROP TRIGGER triples_delete;" "\n" \
+                                           "CREATE TRIGGER triples_delete INSTEAD OF DELETE ON triples" "\n" \
+                                           "FOR EACH ROW BEGIN" "\n" \
+                                           "  -- subject uri/blank" "\n" \
+                                           "  DELETE FROM so_uris    WHERE (OLD.s_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_uri_id    = OLD.s_uri_id))      AND (id = OLD.s_uri_id);" "\n" \
+                                           "  DELETE FROM so_blanks  WHERE (OLD.s_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_blank_id  = OLD.s_blank_id))    AND (id = OLD.s_blank_id);" "\n" \
+                                           "  -- predicate uri" "\n" \
+                                           "  DELETE FROM p_uris     WHERE (OLD.p_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE p_uri_id    = OLD.p_uri_id))      AND (id = OLD.p_uri_id);" "\n" \
+                                           "  -- object uri/blank" "\n" \
+                                           "  DELETE FROM so_uris    WHERE (OLD.o_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_uri_id    = OLD.o_uri_id))      AND (id = OLD.o_uri_id);" "\n" \
+                                           "  DELETE FROM so_blanks  WHERE (OLD.o_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_blank_id  = OLD.o_blank_id))    AND (id = OLD.o_blank_id);" "\n" \
+                                           "  -- object literal" "\n" \
+                                           "  DELETE FROM o_literals WHERE (OLD.o_lit_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_lit_id    = OLD.o_lit_id))      AND (id = OLD.o_lit_id);" "\n" \
+                                           "  DELETE FROM t_uris     WHERE (OLD.o_datatype_id IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM o_literals       WHERE datatype_id = OLD.o_datatype_id)) AND (id = OLD.o_datatype_id);" "\n" \
+                                           "  -- context uri" "\n" \
+                                           "  DELETE FROM c_uris     WHERE (OLD.c_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE c_uri_id    = OLD.c_uri_id))      AND (id = OLD.c_uri_id);" "\n" \
+                                           "  -- triple" "\n" \
+                                           "  DELETE FROM triple_relations WHERE id = OLD.id;" "\n" \
+                                           "END;" "\n" \
+                                           "PRAGMA user_version=2;" "\n" \
         ;
 
         const char *const migrations[] = {
@@ -1006,7 +1007,8 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
             NULL
         };
         {
-            const size_t mig_count = sizeof(migrations) / sizeof(migrations[0]) - 1;
+            const size_t mig_count = array_length(migrations) - 1;
+            assert(2 == mig_count && "migrations count wrong.");
             assert(!migrations[mig_count] && "migrations must be NULL terminated.");
             if( mig_count < schema_version ) {
                 // schema is more recent than this source file knows to handle.
@@ -1336,50 +1338,50 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
                        | (context_node ? P_C_URI : 0)
     ;
     assert(params <= ALL_PARAMS && "params bitmask overflow");
-    assert(params < sizeof(db_ctx->stmt_triple_finds) / sizeof(db_ctx->stmt_triple_finds[0]) && "statement cache array overflow");
+    assert(params < array_length(db_ctx->stmt_triple_finds) && "statement cache array overflow");
 
     const int idx = params; // might become more complex to save some memory in db_ctx->stmt_triple_finds - see https://github.com/mro/librdf.sqlite/issues/11#issuecomment-151959176
     sqlite3_stmt *stmt = db_ctx->stmt_triple_finds[idx];
     if( NULL == stmt ) {
-        const char *find_triples_sql = // generated via tools/sql2c.sh find_triples.sql
-                                       " -- result columns must match as in enum idx_triple_column_t" "\n" \
-                                       "SELECT" "\n" \
-                                       " -- all *_id (hashes):" "\n" \
-                                       "  id" "\n" \
-                                       "  ,s_uri_id" "\n" \
-                                       "  ,s_blank_id" "\n" \
-                                       "  ,p_uri_id" "\n" \
-                                       "  ,o_uri_id" "\n" \
-                                       "  ,o_blank_id" "\n" \
-                                       "  ,o_lit_id" "\n" \
-                                       "  ,o_datatype_id" "\n" \
-                                       "  ,c_uri_id" "\n" \
-                                       " -- all values:" "\n" \
-                                       "  ,s_uri" "\n" \
-                                       "  ,s_blank" "\n" \
-                                       "  ,p_uri" "\n" \
-                                       "  ,o_uri" "\n" \
-                                       "  ,o_blank" "\n" \
-                                       "  ,o_text" "\n" \
-                                       "  ,o_language" "\n" \
-                                       "  ,o_datatype" "\n" \
-                                       "  ,c_uri" "\n" \
-                                       "FROM triples" "\n" \
-                                       "WHERE 1" "\n" \
-                                       " -- subject" "\n" \
-                                       "AND s_uri_id   = :s_uri_id" "\n" \
-                                       "AND s_blank_id = :s_blank_id" "\n" \
-                                       "AND p_uri_id   = :p_uri_id" "\n" \
-                                       " -- object" "\n" \
-                                       "AND o_uri_id   = :o_uri_id" "\n" \
-                                       "AND o_blank_id = :o_blank_id" "\n" \
-                                       "AND o_lit_id   = :o_lit_id" "\n" \
-                                       " -- context node" "\n" \
-                                       "AND c_uri_id   = :c_uri_id" "\n" \
+        const char find_triples_sql[] = // generated via tools/sql2c.sh find_triples.sql
+                                        " -- result columns must match as in enum idx_triple_column_t" "\n" \
+                                        "SELECT" "\n" \
+                                        " -- all *_id (hashes):" "\n" \
+                                        "  id" "\n" \
+                                        "  ,s_uri_id" "\n" \
+                                        "  ,s_blank_id" "\n" \
+                                        "  ,p_uri_id" "\n" \
+                                        "  ,o_uri_id" "\n" \
+                                        "  ,o_blank_id" "\n" \
+                                        "  ,o_lit_id" "\n" \
+                                        "  ,o_datatype_id" "\n" \
+                                        "  ,c_uri_id" "\n" \
+                                        " -- all values:" "\n" \
+                                        "  ,s_uri" "\n" \
+                                        "  ,s_blank" "\n" \
+                                        "  ,p_uri" "\n" \
+                                        "  ,o_uri" "\n" \
+                                        "  ,o_blank" "\n" \
+                                        "  ,o_text" "\n" \
+                                        "  ,o_language" "\n" \
+                                        "  ,o_datatype" "\n" \
+                                        "  ,c_uri" "\n" \
+                                        "FROM triples" "\n" \
+                                        "WHERE 1" "\n" \
+                                        " -- subject" "\n" \
+                                        "AND s_uri_id   = :s_uri_id" "\n" \
+                                        "AND s_blank_id = :s_blank_id" "\n" \
+                                        "AND p_uri_id   = :p_uri_id" "\n" \
+                                        " -- object" "\n" \
+                                        "AND o_uri_id   = :o_uri_id" "\n" \
+                                        "AND o_blank_id = :o_blank_id" "\n" \
+                                        "AND o_lit_id   = :o_lit_id" "\n" \
+                                        " -- context node" "\n" \
+                                        "AND c_uri_id   = :c_uri_id" "\n" \
         ;
 
         // create a SQL working copy (on stack) to fiddle with
-        char sql[sizeof(find_triples_sql) + 1];
+        char sql[sizeof(find_triples_sql)];
         strcpy(sql, find_triples_sql);
         // SQL-comment out the NULL parameter terms
         if( 0 == (P_S_URI & params) )
