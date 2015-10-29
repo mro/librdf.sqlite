@@ -1328,7 +1328,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
                        | (LIBRDF_NODE_TYPE_RESOURCE == node_type(s) ? P_S_URI : 0)
                        | (LIBRDF_NODE_TYPE_BLANK == node_type(s) ? P_S_BLANK : 0)
                        | (LIBRDF_NODE_TYPE_RESOURCE == node_type(p) ? P_P_URI : 0)
-                       | (LIBRDF_NODE_TYPE_RESOURCE == node_type(o) ? P_P_URI : 0)
+                       | (LIBRDF_NODE_TYPE_RESOURCE == node_type(o) ? P_O_URI : 0)
                        | (LIBRDF_NODE_TYPE_BLANK == node_type(o) ? P_O_BLANK : 0)
                        | (LIBRDF_NODE_TYPE_LITERAL == node_type(o) ? P_O_TEXT : 0)
                        | (librdf_node_get_literal_value_datatype_uri(o) ? P_O_DATATYPE : 0)
