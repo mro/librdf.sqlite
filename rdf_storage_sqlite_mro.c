@@ -1325,15 +1325,15 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
 
     // build the bitmask of parameters to set (non-NULL)
     const int params = 0
-        | (LIBRDF_NODE_TYPE_RESOURCE == node_type(s) ? P_S_URI : 0)
-        | (LIBRDF_NODE_TYPE_BLANK == node_type(s) ? P_S_BLANK : 0)
-        | (LIBRDF_NODE_TYPE_RESOURCE == node_type(p) ? P_P_URI : 0)
-        | (LIBRDF_NODE_TYPE_RESOURCE == node_type(o) ? P_P_URI : 0)
-        | (LIBRDF_NODE_TYPE_BLANK == node_type(o) ? P_O_BLANK : 0)
-        | (LIBRDF_NODE_TYPE_LITERAL == node_type(o) ? P_O_TEXT : 0)
-        | (librdf_node_get_literal_value_datatype_uri(o) ? P_O_DATATYPE : 0)
-        | (librdf_node_get_literal_value_language(o) ? P_O_LANGUAGE : 0)
-        | (context_node ? P_C_URI : 0)
+                       | (LIBRDF_NODE_TYPE_RESOURCE == node_type(s) ? P_S_URI : 0)
+                       | (LIBRDF_NODE_TYPE_BLANK == node_type(s) ? P_S_BLANK : 0)
+                       | (LIBRDF_NODE_TYPE_RESOURCE == node_type(p) ? P_P_URI : 0)
+                       | (LIBRDF_NODE_TYPE_RESOURCE == node_type(o) ? P_P_URI : 0)
+                       | (LIBRDF_NODE_TYPE_BLANK == node_type(o) ? P_O_BLANK : 0)
+                       | (LIBRDF_NODE_TYPE_LITERAL == node_type(o) ? P_O_TEXT : 0)
+                       | (librdf_node_get_literal_value_datatype_uri(o) ? P_O_DATATYPE : 0)
+                       | (librdf_node_get_literal_value_language(o) ? P_O_LANGUAGE : 0)
+                       | (context_node ? P_C_URI : 0)
     ;
     assert(params <= ALL_PARAMS && "params bitmask overflow");
     assert(params < sizeof(db_ctx->stmt_triple_finds) / sizeof(db_ctx->stmt_triple_finds[0]) && "statement cache array overflow");
