@@ -1281,12 +1281,12 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
                 librdf_statement_set_object(st, node);
             }
             assert(librdf_statement_is_complete(st) && "found statement must be complete");
-            assert(librdf_statement_match(st, ctx->pattern) && "match candidate doesn't match.");
+            assert(NULL == ctx->pattern || librdf_statement_match(st, ctx->pattern) && "match candidate doesn't match.");
             assert(st == ctx->statement && "mismatch.");
             ctx->dirty = BOOL_NO;
         }
         assert(librdf_statement_is_complete(ctx->statement) && "found statement must be complete");
-        assert(librdf_statement_match(ctx->statement, ctx->pattern) && "match candidate doesn't match.");
+        assert(NULL == ctx->pattern || librdf_statement_match(ctx->statement, ctx->pattern) && "match candidate doesn't match.");
         return ctx->statement;
     }
     case LIBRDF_ITERATOR_GET_METHOD_GET_CONTEXT:
