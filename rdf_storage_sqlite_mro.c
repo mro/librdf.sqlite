@@ -1132,7 +1132,7 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
             }
             db_ctx->sql_cache_mask = ALL_PARAMS & i; // clip range
         }
-        librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "good value: <%s> \"%d\"^^xsd:unsignedShort", feat, db_ctx->sql_cache_mask);
+        librdf_log(NULL, 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "good value: <%s> \"%d\"^^xsd:unsignedShort", feat, db_ctx->sql_cache_mask);
         return 0;
     }
 
@@ -1232,12 +1232,16 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
                 /* subject */
                 librdf_node *node = NULL;
                 const str_uri_t uri = column_uri_string(stm, IDX_S_URI);
-                if( uri )
+                if( uri ) {
+                    assert('\0' != uri[0] && "empty uri");
                     node = librdf_new_node_from_uri_string(w, uri);
+                }
                 if( !node ) {
                     const str_blank_t blank = column_blank_string(stm, IDX_S_BLANK);
-                    if( blank )
+                    if( blank ) {
+                        assert('\0' != blank[0] && "empty blank");
                         node = librdf_new_node_from_blank_identifier(w, blank);
+                    }
                 }
                 if( !node )
                     return NULL;
@@ -1276,10 +1280,13 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
                     return NULL;
                 librdf_statement_set_object(st, node);
             }
-            assert(librdf_statement_is_complete(st) && "hu?");
-            assert(librdf_statement_match(ctx->statement, ctx->pattern) && "match candidate doesn't match.");
+            assert(librdf_statement_is_complete(st) && "found statement must be complete");
+            assert(librdf_statement_match(st, ctx->pattern) && "match candidate doesn't match.");
+            assert(st == ctx->statement && "mismatch.");
             ctx->dirty = BOOL_NO;
         }
+        assert(librdf_statement_is_complete(ctx->statement) && "found statement must be complete");
+        assert(librdf_statement_match(ctx->statement, ctx->pattern) && "match candidate doesn't match.");
         return ctx->statement;
     }
     case LIBRDF_ITERATOR_GET_METHOD_GET_CONTEXT:
@@ -1334,9 +1341,6 @@ static int pub_contains_statement(librdf_storage *storage, librdf_statement *sta
 
 static librdf_stream *pub_context_find_statements(librdf_storage *storage, librdf_statement *statement, librdf_node *context_node)
 {
-    const sqlite_rc_t begin = transaction_start(storage);
-    instance_t *db_ctx = get_instance(storage);
-
     librdf_node *s = librdf_statement_get_subject(statement);
     librdf_node *p = librdf_statement_get_predicate(statement);
     librdf_node *o = librdf_statement_get_object(statement);
@@ -1354,9 +1358,13 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
                        | (context_node ? P_C_URI : 0)
     ;
     assert(params <= ALL_PARAMS && "params bitmask overflow");
+    const int idx = params; // might become more complex to save some memory in db_ctx->stmt_triple_finds - see https://github.com/mro/librdf.sqlite/issues/11#issuecomment-151959176
+
+    const sqlite_rc_t begin = transaction_start(storage);
+    instance_t *db_ctx = get_instance(storage);
+
     assert(params < array_length(db_ctx->stmt_triple_finds) && "statement cache array overflow");
 
-    const int idx = params; // might become more complex to save some memory in db_ctx->stmt_triple_finds - see https://github.com/mro/librdf.sqlite/issues/11#issuecomment-151959176
     sqlite3_stmt *stmt = db_ctx->stmt_triple_finds[idx];
     if( NULL == stmt ) {
         const char find_triples_sql[] = // generated via tools/sql2c.sh find_triples.sql
@@ -1423,7 +1431,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
         assert('-' != sql[0] && "'AND c_uri_id' not found in find_triples.sql");
 
         librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Created SQL statement #%d %s", idx, sql);
-        stmt = db_ctx->stmt_triple_finds[idx] = prep_stmt(db_ctx->db, &stmt, sql);
+        db_ctx->stmt_triple_finds[idx] = prep_stmt(db_ctx->db, &stmt, sql);
     }
     /*
      *  if( BOOL_NO ) {
@@ -1432,7 +1440,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
      *  }
      */
     const sqlite_rc_t rc = bind_stmt(db_ctx, statement, context_node, stmt);
-    assert(SQLITE_OK == rc && "foo");
+    assert(SQLITE_OK == rc && "find_statements: failed to bind SQL parameters");
 
     if( BOOL_NO ) {
         // toggle via "profile" feature?
