@@ -23,7 +23,7 @@
 # 
 cd "$(dirname "$0")"/..
 
-echo "\tconst char *$(basename "$1" .sql)_sql = // generated via $0 $@"
+echo "\tconst char $(basename "$1" .sql)_sql[] = // generated via $0 $@"
 
 # turn comments into whitespace
 sed -e 's/^--.*$//' "$1" | while IFS= read sql # http://stackoverflow.com/a/7879523

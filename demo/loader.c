@@ -10,7 +10,7 @@
 // rapper: Parsing returned 100430 triples
 //
 // Compile:
-// $ gcc -std=c99 -I /usr/include/raptor2 -I /usr/include/rasqal -l rdf -lsqlite3 loader.c
+// $ gcc -std=c99 -D DEBUG=1 -I /usr/include/raptor2 -I /usr/include/rasqal -l rdf -lsqlite3 loader.c
 //
 // Run:
 // $ echo "librdf.sqlite" ; time ./a.out "file://$(pwd)/loader.ttl" "http://purl.mro.name/rdf/sqlite/"

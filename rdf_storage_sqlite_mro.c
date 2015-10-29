@@ -98,7 +98,7 @@ typedef enum {
     P_C_URI       = 1 << 8
 } sql_find_param_t;
 
-#define ALL_PARAMS (P_C_URI << 1)
+#define ALL_PARAMS ( (P_C_URI << 1) - 1 )
 
 typedef struct
 {
@@ -123,7 +123,7 @@ typedef struct
 
     sqlite3_stmt *stmt_size;
 
-    sqlite3_stmt *stmt_triple_finds[ALL_PARAMS]; // sparse triples
+    sqlite3_stmt *stmt_triple_finds[ALL_PARAMS + 1]; // sparse triples
 }
 instance_t;
 
@@ -542,7 +542,7 @@ static sqlite_rc_t bind_stmt(instance_t *db_ctx, librdf_statement *statement, li
 
     const hash_t stmt_id = hash_combine_stmt(s_uri_id, s_blank_id, p_uri_id, o_uri_id, o_blank_id, o_lit_id, c_uri_id);
 
-    assert(stmt_hash(statement, context_node, db_ctx->digest) == stmt_id && "statement hash compatation mismatch");
+    assert(stmt_hash(statement, context_node, db_ctx->digest) == stmt_id && "statement hash computation mismatch");
     if( SQLITE_OK != ( rc = bind_int(stmt, ":stmt_id", stmt_id) ) ) return rc;
 
     return SQLITE_OK;
@@ -700,7 +700,7 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
         return RET_ERROR;
     }
 
-    instance_t *db_ctx = LIBRDF_CALLOC( instance_t *, 1, sizeof(*db_ctx) );
+    instance_t *db_ctx = LIBRDF_CALLOC(instance_t *, sizeof(*db_ctx), 1);
     if( !db_ctx ) {
         free_hash(options);
         return RET_ERROR;
@@ -772,7 +772,7 @@ static int pub_close(librdf_storage *storage)
 
     finalize_stmt( &(db_ctx->stmt_size) );
 
-    for( int i = ALL_PARAMS - 1; i >= 0; i-- )
+    for( int i = ALL_PARAMS; i >= 0; i-- )
         finalize_stmt( &(db_ctx->stmt_triple_finds[i]) );
 
     const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
@@ -1130,7 +1130,7 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
                 librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:unsignedShort", feat, val);
                 return 3;
             }
-            db_ctx->sql_cache_mask = (ALL_PARAMS - 1) & i; // clip range
+            db_ctx->sql_cache_mask = ALL_PARAMS & i; // clip range
         }
         librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "good value: <%s> \"%d\"^^xsd:unsignedShort", feat, db_ctx->sql_cache_mask);
         return 0;
@@ -1573,7 +1573,7 @@ static int pub_context_remove_statements(librdf_storage *storage, librdf_node *c
 
 static void register_factory(librdf_storage_factory *factory)
 {
-    assert( !strcmp(factory->name, LIBRDF_STORAGE_SQLITE_MRO) );
+    assert(!strcmp(factory->name, LIBRDF_STORAGE_SQLITE_MRO) && "wrong factory name");
 
     factory->version                    = LIBRDF_STORAGE_INTERFACE_VERSION;
     factory->init                       = pub_init;
