@@ -162,6 +162,22 @@ static inline librdf_node_type node_type(librdf_node *node)
 }
 
 
+static inline librdf_uri *literal_type_uri(librdf_node *o)
+{
+    if( NULL == o || LIBRDF_NODE_TYPE_LITERAL != node_type(o) )
+        return NULL;
+    return librdf_node_get_literal_value_datatype_uri(o);
+}
+
+
+static inline char *literal_language(librdf_node *o)
+{
+    if( NULL == o || LIBRDF_NODE_TYPE_LITERAL != node_type(o) )
+        return NULL;
+    return librdf_node_get_literal_value_language(o);
+}
+
+
 /* Copy first 8 bytes of digest into 64bit using a method portable across big/little endianness.
  */
 static hash_t digest_hash(librdf_digest *digest)
@@ -1333,8 +1349,8 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
                        | (LIBRDF_NODE_TYPE_RESOURCE == node_type(o) ? P_O_URI : 0)
                        | (LIBRDF_NODE_TYPE_BLANK == node_type(o) ? P_O_BLANK : 0)
                        | (LIBRDF_NODE_TYPE_LITERAL == node_type(o) ? P_O_TEXT : 0)
-                       | (librdf_node_get_literal_value_datatype_uri(o) ? P_O_DATATYPE : 0)
-                       | (librdf_node_get_literal_value_language(o) ? P_O_LANGUAGE : 0)
+                       | (NULL != literal_type_uri(o) ? P_O_DATATYPE : 0)
+                       | (NULL != literal_language(o) ? P_O_LANGUAGE : 0)
                        | (context_node ? P_C_URI : 0)
     ;
     assert(params <= ALL_PARAMS && "params bitmask overflow");
