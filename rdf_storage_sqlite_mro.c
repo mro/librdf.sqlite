@@ -753,6 +753,11 @@ static void pub_terminate(librdf_storage *storage)
         LIBRDF_FREE(char *, (void *)db_ctx->name);
     if( db_ctx->digest )
         librdf_free_digest(db_ctx->digest);
+
+    assert(db_ctx->stmt_triple_finds && "db_ctx->stmt_triple_finds is NULL");
+    for( int i = ALL_PARAMS + 1 - 1; i >= 0; i-- )
+        assert(NULL == db_ctx->stmt_triple_finds[i] && "un-finalized sqlite3_stmt in db_ctx->stmt_triple_finds");
+
     LIBRDF_FREE(instance_t *, db_ctx);
 }
 
@@ -772,8 +777,11 @@ static int pub_close(librdf_storage *storage)
 
     finalize_stmt( &(db_ctx->stmt_size) );
 
-    for( int i = ALL_PARAMS; i >= 0; i-- )
+    for( int i = ALL_PARAMS; i >= 0; i-- ) {
+        // if( NULL != db_ctx->stmt_triple_finds[i] )
+        // librdf_log(get_world(storage), 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "finalize_stmt %d %s", i, sqlite3_sql(db_ctx->stmt_triple_finds[i]));
         finalize_stmt( &(db_ctx->stmt_triple_finds[i]) );
+    }
 
     const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
     if( SQLITE_OK == rc ) {
@@ -1086,7 +1094,7 @@ static librdf_node *pub_get_feature(librdf_storage *storage, librdf_uri *feature
         return NULL;
     librdf_node *ret = NULL;
     librdf_uri *uri_xsd_boolean = librdf_new_uri(get_world(storage), (const unsigned char *)"http://www.w3.org/2000/10/XMLSchema#" "boolean");
-    librdf_uri *uri_xsd_unsignedShort = librdf_new_uri(get_world(storage), "http://www.w3.org/2000/10/XMLSchema#" "unsignedShort");
+    librdf_uri *uri_xsd_unsignedShort = librdf_new_uri(get_world(storage), (const unsigned char *)"http://www.w3.org/2000/10/XMLSchema#" "unsignedShort");
     if( !ret && 0 == strcmp(LIBRDF_MODEL_FEATURE_CONTEXTS, (const char *)feat) )
         ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"0", NULL, uri_xsd_boolean);
     if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", (const char *)feat) ) {
@@ -1120,7 +1128,7 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
         return -1;
     instance_t *db_ctx = get_instance(storage);
 
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", feat) ) {
+    if( 0 == strcmp( (const unsigned char *)LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", feat ) ) {
         const char *val = librdf_node_get_literal_value(value);
         if( 0 == strcmp("0", val) ) {
             db_ctx->sql_cache_mask = 0;
@@ -1363,7 +1371,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     const sqlite_rc_t begin = transaction_start(storage);
     instance_t *db_ctx = get_instance(storage);
 
-    assert(params < array_length(db_ctx->stmt_triple_finds) && "statement cache array overflow");
+    assert(params < ALL_PARAMS + 1 && "statement cache array overflow");
 
     sqlite3_stmt *stmt = db_ctx->stmt_triple_finds[idx];
     if( NULL == stmt ) {
