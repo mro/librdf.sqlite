@@ -123,7 +123,7 @@ typedef struct
 
     sqlite3_stmt *stmt_size;
 
-    sqlite3_stmt *stmt_triple_finds[ALL_PARAMS + 1]; // sparse triples
+    sqlite3_stmt **stmt_triple_finds; // sparse triples
 }
 instance_t;
 
@@ -740,6 +740,9 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
     }
 
     free_hash(options);
+
+    db_ctx->stmt_triple_finds = LIBRDF_CALLOC(sqlite3_stmt * *, sizeof(sqlite3_stmt *), ALL_PARAMS + 1);
+
     return RET_OK;
 }
 
@@ -757,6 +760,7 @@ static void pub_terminate(librdf_storage *storage)
     assert(db_ctx->stmt_triple_finds && "db_ctx->stmt_triple_finds is NULL");
     for( int i = ALL_PARAMS + 1 - 1; i >= 0; i-- )
         assert(NULL == db_ctx->stmt_triple_finds[i] && "un-finalized sqlite3_stmt in db_ctx->stmt_triple_finds");
+    LIBRDF_FREE(sqlite3_stmt * *, db_ctx->stmt_triple_finds);
 
     LIBRDF_FREE(instance_t *, db_ctx);
 }
