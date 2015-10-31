@@ -1445,11 +1445,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
         assert('-' != sql[0] && "'AND c_uri_id' not found in find_triples.sql");
 
         librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Created SQL statement #%d %s", idx, sql);
-        char *s = malloc( sizeof(sql) );
-        strncpy( s, sql, sizeof(sql) );
-        prep_stmt(db_ctx->db, &stmt, s);
-        db_ctx->stmt_triple_finds[idx] = stmt;
-        free(s);
+        db_ctx->stmt_triple_finds[idx] = prep_stmt(db_ctx->db, &stmt, sql);
     }
     /*
      *  if( BOOL_NO ) {
