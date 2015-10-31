@@ -1199,6 +1199,7 @@ typedef struct
     sqlite_rc_t txn;
     sqlite_rc_t rc;
     boolean_t dirty;
+    boolean_t keep_stmt;
 }
 iterator_t;
 
@@ -1321,7 +1322,12 @@ static void pub_iter_finished(void *_ctx)
         librdf_free_statement(ctx->statement);
     librdf_storage_remove_reference(ctx->storage);
     transaction_rollback(ctx->storage, ctx->txn);
-    sqlite3_finalize(ctx->stmt);
+    if ( ctx->keep_stmt ) {
+        sqlite3_reset(ctx->stmt);
+        sqlite3_clear_bindings(ctx->stmt);
+    } else
+        sqlite3_finalize(ctx->stmt);
+
     LIBRDF_FREE(iterator_t *, ctx);
 }
 
@@ -1474,6 +1480,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     iter->rc = sqlite3_step(stmt);
     iter->statement = librdf_new_statement(w);
     iter->dirty = BOOL_YES;
+    iter->keep_stmt = BOOL_YES;
 
     librdf_storage_add_reference(iter->storage);
     librdf_stream *stream = librdf_new_stream(w, iter, &pub_iter_end_of_stream, &pub_iter_next_statement, &pub_iter_get_statement, &pub_iter_finished);
