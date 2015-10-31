@@ -1322,7 +1322,7 @@ static void pub_iter_finished(void *_ctx)
         librdf_free_statement(ctx->statement);
     librdf_storage_remove_reference(ctx->storage);
     transaction_rollback(ctx->storage, ctx->txn);
-    if ( ctx->keep_stmt ) {
+    if( ctx->keep_stmt ) {
         sqlite3_reset(ctx->stmt);
         sqlite3_clear_bindings(ctx->stmt);
     } else
