@@ -1,0 +1,14 @@
+# http://docs.travis-ci.com/user/languages/c/
+language: c
+sudo: false
+addons:
+  apt:
+    packages:
+    - libsqlite3-dev
+    - librdf0-dev
+    - librdf-storage-sqlite
+    # - raptor2-utils
+compiler:
+  - clang
+  - gcc
+script: test/run.sh
