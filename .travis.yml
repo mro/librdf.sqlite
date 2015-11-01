@@ -11,4 +11,4 @@ addons:
 compiler:
   - clang
   - gcc
-script: test/run.sh
+script: sh test/run.sh
