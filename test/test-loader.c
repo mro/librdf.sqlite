@@ -30,11 +30,8 @@
 #include <string.h>
 #include <stdarg.h>
 
-#include <librdf.h>
-#include <raptor2.h>
-
 #include "../rdf_storage_sqlite_mro.h"
-// #include "../rdf_storage_sqlite_mro.c" // unorthodox but ok for now
+// #include <librdf.h>
 
 /* function prototypes */
 int main(int argc, char *argv[]);
@@ -93,6 +90,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "could not create sqlite storage");
         return(1);
     }
+
     {
         librdf_uri *uri_xsd_unsignedShort = librdf_new_uri(world, "http://www.w3.org/2000/10/XMLSchema#" "unsignedShort");
         librdf_uri *f_uri = librdf_new_uri(world, LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask");
