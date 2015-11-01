@@ -1,5 +1,5 @@
 
-[![Build Status](https://travis-ci.org/mro/librdf.sqlite.svg?branch=master)](https://travis-ci.org/mro/librdf.sqlite)
+[![Build Status](https://travis-ci.org/mro/librdf.sqlite.svg)](https://travis-ci.org/mro/librdf.sqlite)
 
 Improved [SQLite](http://sqlite.org) RDF triple [storage module](http://librdf.org/docs/api/redland-storage-modules.html)
 for [librdf](http://librdf.org/).
