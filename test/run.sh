@@ -1,6 +1,6 @@
 #!/bin/sh
 cd "$(dirname "$0")"
-
+set -x
 
 TMP=tmp
 rm "$TMP"/*
