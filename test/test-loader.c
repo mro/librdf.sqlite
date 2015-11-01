@@ -10,7 +10,9 @@
 // rapper: Parsing returned 100430 triples
 //
 // Compile:
-// $ gcc -std=c99 -D DEBUG=1 -I /usr/include/raptor2 -I /usr/include/rasqal -l rdf -lsqlite3 loader.c
+// $ gcc -g3 -O0 -pedantic -D DEBUG=1 -std=c99 -I /usr/include/raptor2 -I /usr/include/rasqal -c -o rdf_storage_sqlite_mro.o ../rdf_storage_sqlite_mro.c
+// $ gcc -g3 -O0 -pedantic -D DEBUG=1 -std=c99 -I /usr/include/raptor2 -I /usr/include/rasqal -c -o test-loader.o test-loader.c
+// $ gcc rdf_storage_sqlite_mro.o test-loader.o -lrdf -lsqlite3
 //
 // Run:
 // $ echo "librdf.sqlite" ; time ./a.out "file://$(pwd)/loader.ttl" "http://purl.mro.name/rdf/sqlite/"
@@ -32,7 +34,7 @@
 #include <raptor2.h>
 
 #include "../rdf_storage_sqlite_mro.h"
-#include "../rdf_storage_sqlite_mro.c" // unorthodox but ok for now
+// #include "../rdf_storage_sqlite_mro.c" // unorthodox but ok for now
 
 /* function prototypes */
 int main(int argc, char *argv[]);
@@ -86,7 +88,7 @@ int main(int argc, char *argv[])
     fprintf(stdout, "%s\n", extfind);
 
     // create storage
-    storage = librdf_new_storage(world, storage_name, "tmp/loader.sqlite", "new='yes',synchronous='off'");
+    storage = librdf_new_storage(world, storage_name, "tmp/test-loader.sqlite", "new='yes',synchronous='off'");
     if( !storage ) {
         fprintf(stderr, "could not create sqlite storage");
         return(1);
