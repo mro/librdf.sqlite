@@ -1,6 +1,6 @@
 # http://docs.travis-ci.com/user/languages/c/
 language: c
-sudo: false
+sudo: true  # apt packages aren't whitelisted (yet?)
 addons:
   apt:
     packages:
