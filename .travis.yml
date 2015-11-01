@@ -13,5 +13,5 @@ before_install:
   - sudo apt-get install -y librdf0-dev librdf-storage-sqlite
 compiler:
   - gcc
-  - clang
+#  - clang
 script: bash test/run.sh

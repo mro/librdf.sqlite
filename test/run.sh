@@ -38,6 +38,7 @@ run_test() {
       gcc -o "$TMP/a.out" "$TMP/rdf_storage_sqlite_mro.o" "$TMP/$test_name".o -lrdf -lsqlite3 && {
         # valgrind --leak-check=full --show-reachable=yes \
         "$TMP/a.out" "file://$(pwd)/$test_base.ttl" "http://purl.mro.name/rdf/sqlite/" 2> /dev/null
+        code=$?
       }
       echo -n "travis_fold:end:${test_name}\r"
     }
@@ -45,9 +46,9 @@ run_test() {
 
   echo -n "travis_fold:end:${test_name}\r"
   if [ "$code" -eq 0 ] ; then
-    echo "${FGC_GREEN}✓${FGC_NONE} ${test_name}"
+    echo -e "${FGC_GREEN}✓${FGC_NONE} ${test_name}"
   else
-    echo "${FGC_RED}✗${FGC_NONE} ${test_name} (code: $code)"
+    echo -e "${FGC_RED}✗${FGC_NONE} ${test_name} (code: $code)"
     status_code=1
   fi
 }
