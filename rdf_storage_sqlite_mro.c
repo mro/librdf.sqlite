@@ -1127,17 +1127,17 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
 {
     if( !feature )
         return -1;
-    const char *feat = librdf_uri_as_string(feature);
+    const str_uri_t feat = (const str_uri_t)librdf_uri_as_string(feature);
     if( !feat )
         return -1;
     instance_t *db_ctx = get_instance(storage);
 
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", feat) ) {
-        const char *val = librdf_node_get_literal_value(value);
-        if( 0 == strcmp("0", val) ) {
+    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", (const char *)feat) ) {
+        const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
+        if( 0 == strcmp("0", (const char *)val) ) {
             db_ctx->sql_cache_mask = 0;
         } else {
-            const int i = atoi(val);
+            const int i = atoi( (const char *)val );
             if( 0 >= i ) {
                 librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:unsignedShort", feat, val);
                 return 3;
@@ -1148,11 +1148,11 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
         return 0;
     }
 
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/profile", feat) ) {
-        const char *val = librdf_node_get_literal_value(value);
-        if( 0 == strcmp("1", val) || 0 == strcmp("true", val) )
+    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/profile", (const char *)feat) ) {
+        const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
+        if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) )
             db_ctx->do_profile = BOOL_YES;
-        else if( 0 == strcmp("0", val) || 0 == strcmp("false", val) )
+        else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) )
             db_ctx->do_profile = BOOL_NO;
         else {
             librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:boolean", feat, val);
@@ -1161,11 +1161,11 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
         return 0;
     }
 
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/explain_query_plan", feat) ) {
-        const char *val = librdf_node_get_literal_value(value);
-        if( 0 == strcmp("1", val) || 0 == strcmp("true", val) )
+    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/explain_query_plan", (const char *)feat) ) {
+        const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
+        if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) )
             db_ctx->do_explain_query_plan = BOOL_YES;
-        else if( 0 == strcmp("0", val) || 0 == strcmp("false", val) )
+        else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) )
             db_ctx->do_explain_query_plan = BOOL_NO;
         else {
             librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:boolean", feat, val);
