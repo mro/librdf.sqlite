@@ -1463,7 +1463,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
 
         librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Created SQL statement #%d %s", idx, sql);
         prep_stmt(db_ctx->db, &stmt, sql);
-        if( params == db_ctx->sql_cache_mask & params )
+        if( params == (db_ctx->sql_cache_mask & params) )
             // decide whether to keep the sqlite3_statement for reuse or not.
             db_ctx->stmt_triple_finds[idx] = stmt;
     } // else if( BOOL_NO ) {
