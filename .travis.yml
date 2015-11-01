@@ -4,14 +4,14 @@ sudo: true  # apt packages aren't whitelisted (yet?) https://github.com/travis-c
 #addons:
 #  apt:
 #    packages:
-#    - libsqlite3-dev
 #    - librdf0-dev
 #    - librdf-storage-sqlite
 #    # - raptor2-utils
+#    # - libsqlite3-dev
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -y libsqlite3-dev librdf0-dev librdf-storage-sqlite
+  - sudo apt-get install -y librdf0-dev librdf-storage-sqlite
 compiler:
   - gcc
-#  - clang
-script: sh test/run.sh
+  - clang
+script: bash test/run.sh
