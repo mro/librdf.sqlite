@@ -44,7 +44,7 @@ run_test() {
   }
 
   echo -n "travis_fold:end:${test_name}\r"
-  if [ $code -eq 0 ] ; then
+  if [ "$code" -eq 0 ] ; then
     echo "${FGC_GREEN}✓${FGC_NONE} ${test_name}"
   else
     echo "${FGC_RED}✗${FGC_NONE} ${test_name} (code: $code)"
