@@ -11,7 +11,8 @@ sudo: true  # apt packages aren't whitelisted (yet?) https://github.com/travis-c
 before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -y libsqlite3-dev librdf0-dev librdf-storage-sqlite
-compiler:
-  - clang
-  - gcc
+  - sudo find / -maxdepth 4 -name "librdf*" -or -name "libsqlite*"
+# compiler:
+#  - clang
+#  - gcc
 script: sh test/run.sh
