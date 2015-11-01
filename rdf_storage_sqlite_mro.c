@@ -1127,12 +1127,12 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
 {
     if( !feature )
         return -1;
-    const unsigned char *feat = librdf_uri_as_string(feature);
+    const char *feat = librdf_uri_as_string(feature);
     if( !feat )
         return -1;
     instance_t *db_ctx = get_instance(storage);
 
-    if( 0 == strcmp( (const unsigned char *)LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", feat ) ) {
+    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", feat) ) {
         const char *val = librdf_node_get_literal_value(value);
         if( 0 == strcmp("0", val) ) {
             db_ctx->sql_cache_mask = 0;
