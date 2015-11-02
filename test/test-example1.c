@@ -15,10 +15,11 @@ static char *all_tests()
     return 0;
 }
 
+
 int main(int argc, char **argv)
 {
     char *result = all_tests();
-    if (result != 0) {
+    if( result != 0 ) {
         printf("%s\n", result);
     } else {
         printf("ALL TESTS PASSED\n");
@@ -28,10 +29,11 @@ int main(int argc, char **argv)
     return result != 0;
 }
 
+
 static char *_main(int argc, char *argv[])
 {
     char *program = argv[0];
-    if (argc < 2 || argc > 3) {
+    if( argc < 2 || argc > 3 ) {
         fprintf(stderr, "USAGE: %s: <RDF source URI> [rdf parser name]\n", program);
         mu_assert("wrong parameters", 0);
     }
@@ -42,7 +44,7 @@ static char *_main(int argc, char *argv[])
     raptor_world *raptor_world_ptr = librdf_world_get_raptor(world);
 
     librdf_uri *uri = librdf_new_uri(world, (const unsigned char *)argv[1]);
-    if (!uri) {
+    if( !uri ) {
         fprintf(stderr, "%s: Failed to create URI\n", program);
         mu_assert("Failed to create URI", 0);
     }
@@ -50,27 +52,27 @@ static char *_main(int argc, char *argv[])
     librdf_storage *storage =
         librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-example1.db",
                            "new='on', synchronous='off', contexts='no'");
-    if (!storage) {
+    if( !storage ) {
         fprintf(stderr, "%s: Failed to create new storage\n", program);
         mu_assert("Failed to create storage", 0);
     }
 
     librdf_model *model = librdf_new_model(world, storage, NULL);
-    if (!model) {
+    if( !model ) {
         fprintf(stderr, "%s: Failed to create model\n", program);
         mu_assert("Failed to create model", 0);
     }
 
     char *parser_name = 3 == argc ? argv[2] : NULL;
     librdf_parser *parser = librdf_new_parser(world, parser_name, NULL, NULL);
-    if (!parser) {
+    if( !parser ) {
         fprintf(stderr, "%s: Failed to create new parser\n", program);
         mu_assert("Failed to create parser", 0);
     }
 
     /* PARSE the URI as RDF/XML */
-    fprintf(stdout, "%s: Parsing URI %s\n", program, librdf_uri_as_string(uri));
-    if (librdf_parser_parse_into_model(parser, uri, uri, model)) {
+    fprintf( stdout, "%s: Parsing URI %s\n", program, librdf_uri_as_string(uri) );
+    if( librdf_parser_parse_into_model(parser, uri, uri, model) ) {
         fprintf(stderr, "%s: Failed to parse RDF into model\n", program);
         mu_assert("Failed to parse RDF", 0);
     }
@@ -83,26 +85,26 @@ static char *_main(int argc, char *argv[])
                                                                         "http://purl.org/dc/elements/1.1/title"),
                                         librdf_new_node_from_literal(world, (const unsigned char *)
                                                                      "My Home Page", NULL, 0)
-        );
+                                        );
     librdf_model_add_statement(model, statement2);
 
     /* Free what we just used to add to the model - now it should be stored */
     librdf_free_statement(statement2);
 
     /* Print out the model */
-//    fprintf(stdout, "%s: Resulting model is:\n", program);
-//    raptor_iostream *iostr = raptor_new_iostream_to_file_handle(raptor_world_ptr, stdout);
-//    librdf_model_write(model, iostr);
-//    raptor_free_iostream(iostr);
+    // fprintf(stdout, "%s: Resulting model is:\n", program);
+    // raptor_iostream *iostr = raptor_new_iostream_to_file_handle(raptor_world_ptr, stdout);
+    // librdf_model_write(model, iostr);
+    // raptor_free_iostream(iostr);
 
-    /* Construct the query predicate (arc) and object (target) 
+    /* Construct the query predicate (arc) and object (target)
      * and partial statement bits
      */
     librdf_node *subject = librdf_new_node_from_uri_string(world, (const unsigned char *)
                                                            "http://www.dajobe.org/");
     librdf_node *predicate = librdf_new_node_from_uri_string(world, (const unsigned char *)
                                                              "http://purl.org/dc/elements/1.1/title");
-    if (!subject || !predicate) {
+    if( !subject || !predicate ) {
         fprintf(stderr, "%s: Failed to create nodes for searching\n", program);
         mu_assert("Failed to create nodes for searching", 0);
     }
@@ -114,13 +116,13 @@ static char *_main(int argc, char *argv[])
 
     fprintf(stdout, "%s: Trying to find_statements\n", program);
     librdf_stream *stream = librdf_model_find_statements(model, partial_statement);
-    if (!stream) {
+    if( !stream ) {
         fprintf(stderr, "%s: librdf_model_find_statements returned NULL stream\n", program);
     } else {
         int count = 0;
-        while (!librdf_stream_end(stream)) {
+        while( !librdf_stream_end(stream) ) {
             librdf_statement *statement = librdf_stream_get_object(stream);
-            if (!statement) {
+            if( !statement ) {
                 fprintf(stderr, "%s: librdf_stream_next returned NULL\n", program);
                 break;
             }
@@ -139,17 +141,17 @@ static char *_main(int argc, char *argv[])
     /* QUERY TEST 2 - use get_targets to do match */
     fprintf(stdout, "%s: Trying to get targets\n", program);
     librdf_iterator *iterator = librdf_model_get_targets(model, subject, predicate);
-    if (!iterator) {
+    if( !iterator ) {
         fprintf(stderr, "%s: librdf_model_get_targets failed to return iterator for searching\n", program);
         mu_assert("librdf_model_get_targets failed to return iterator for searching", 0);
     }
 
     int count = 0;
-    while (!librdf_iterator_end(iterator)) {
+    while( !librdf_iterator_end(iterator) ) {
         librdf_node *target;
 
-        target = (librdf_node *) librdf_iterator_get_object(iterator);
-        if (!target) {
+        target = (librdf_node *)librdf_iterator_get_object(iterator);
+        if( !target ) {
             fprintf(stderr, "%s: librdf_iterator_get_object returned NULL\n", program);
             break;
         }
@@ -184,12 +186,15 @@ static char *_main(int argc, char *argv[])
     return NULL;
 }
 
+
 char *test_main()
 {
     char src_uri[1024] = "file://localhost";
-    mu_assert("Failed to get current working dir.",
-              getcwd(src_uri + strlen(src_uri), sizeof(src_uri) - strlen(src_uri)));
-    strncat(src_uri, "/test-example1.ttl", sizeof(src_uri) - strlen(src_uri));
-    char *argv[] = { "test-example1", src_uri, "turtle", NULL };
+    mu_assert( "Failed to get current working dir.",
+               getcwd( src_uri + strlen(src_uri), sizeof(src_uri) - strlen(src_uri) ) );
+    strncat( src_uri, "/test-example1.ttl", sizeof(src_uri) - strlen(src_uri) );
+    char *argv[] = {
+        "test-example1", src_uri, "turtle", NULL
+    };
     return _main(3, argv);
 }
