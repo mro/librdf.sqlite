@@ -21,6 +21,11 @@ Inspired by the [official sqlite store](https://github.com/dajobe/librdf/blob/ma
 
 See e.g. in (my) <https://github.com/mro/librdf.objc>.
 
+## License
+
+- `test/minunit.h`, Copyright (C) 2002 [John Brewer](http://jera.com), NO WARRANTY,
+- *all others*, Copyright (C) 2014-2015 [Marcus Rohrmoser mobile Software](http://mro.name/me), [Human Rights License](LICENSE)
+
 ## Design Goals
 
 | Quality         | very good | good | normal | irrelevant |
