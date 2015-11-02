@@ -8,6 +8,6 @@ addons:
     - librdf-storage-sqlite
     # - raptor2-utils
 compiler:
-  - gcc
-#  - clang
+#  - gcc
+  - clang
 script: bash test/run.sh
