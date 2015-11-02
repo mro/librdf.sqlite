@@ -1,16 +1,12 @@
 # http://docs.travis-ci.com/user/languages/c/
 language: c
-sudo: true  # apt packages aren't whitelisted (yet?) https://github.com/travis-ci/apt-package-whitelist#package-approval-process
-#addons:
-#  apt:
-#    packages:
-#    - librdf0-dev
-#    - librdf-storage-sqlite
-#    # - raptor2-utils
-#    # - libsqlite3-dev
-before_install:
-  - sudo apt-get update -qq
-  - sudo apt-get install -y librdf0-dev librdf-storage-sqlite
+sudo: false
+addons:
+  apt:
+    packages:
+    - librdf0-dev
+    - librdf-storage-sqlite
+    # - raptor2-utils
 compiler:
   - gcc
 #  - clang
