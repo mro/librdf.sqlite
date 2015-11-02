@@ -1,7 +1,10 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
+[ "$CC" != "" ] || { echo "environment \$CC must be set, e.g. $ CC=gcc $0 $@" 1>&2 && exit 1 ; }
+
 TMP=tmp
+BUILD=build
 
 # terminal colors (require bash)
 # http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
@@ -24,6 +27,8 @@ BGC_PURPLE="\033[7;35m"
 BGC_CYAN="\033[7;36m"
 BGC_WHITE="\033[7;37m"
 
+status_code=0
+
 run_test() {
   test_src="$1"
   test_name="$test_src"
@@ -31,18 +36,18 @@ run_test() {
   echo -n "travis_fold:start:${test_name}\r"
   echo -n "Running $test_name "
 
-  rm "$TMP"/*
-  $CC -pedantic -g -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$TMP/rdf_storage_sqlite_mro.o" "../rdf_storage_sqlite_mro.c" && {
-    $CC -pedantic -g -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$TMP/$test_name".o "$test_src" && {
+  rm "$TMP"/* "$BUILD"/*
+  $CC -pedantic -g -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/rdf_storage_sqlite_mro.o" "../rdf_storage_sqlite_mro.c" && {
+    $CC -pedantic -g -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/$test_name".o "$test_src" && {
       # http://ubuntuforums.org/showthread.php?t=1936253&p=11742200#post11742200
-      $CC -o "$TMP/a.out" "$TMP/rdf_storage_sqlite_mro.o" "$TMP/$test_name".o -lrdf -lsqlite3 && {
+      $CC -o "$BUILD/a.out" "$BUILD/rdf_storage_sqlite_mro.o" "$BUILD/$test_name".o -lrdf -lraptor2 -lsqlite3 && {
         # valgrind --leak-check=full --show-reachable=yes \
-        "$TMP/a.out" "file://$(pwd)/$test_base.ttl" "http://purl.mro.name/rdf/sqlite/" 2> /dev/null
-        code=$?
+        "$BUILD/a.out"
+        # "file://$(pwd)/$test_base.ttl" "http://purl.mro.name/rdf/sqlite/" 2> /dev/null
       }
-      echo -n "travis_fold:end:${test_name}\r"
     }
   }
+  code=$?
 
   echo -n "travis_fold:end:${test_name}\r"
   if [ "$code" -eq 0 ] ; then
@@ -55,4 +60,7 @@ run_test() {
 
 set -x
 
-run_test test-loader.c
+# run_test test-loader.c
+run_test test-example1.c
+
+exit $status_code
