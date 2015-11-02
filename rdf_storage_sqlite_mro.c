@@ -344,7 +344,7 @@ static void trace(void *context, const char *sql)
 // http://stackoverflow.com/a/6618833
 static void profile(void *context, const char *sql, const sqlite3_uint64 ns)
 {
-    fprintf(stderr, "dt=%llu ms Query SQL: %s\n", ns / 1000000, sql);
+    fprintf(stderr, "dt=%llu ns Query SQL: %s\n", ns, sql);
 }
 
 
@@ -1101,10 +1101,10 @@ static librdf_node *pub_get_feature(librdf_storage *storage, librdf_uri *feature
     if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", (const char *)feat) ) {
         ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"1023", NULL, uri_xsd_unsignedShort);
     }
-    if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/profile", (const char *)feat) ) {
+    if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/profile", (const char *)feat) ) {
         ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"0", NULL, uri_xsd_unsignedShort);
     }
-    if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/explain_query_plan", (const char *)feat) ) {
+    if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/explain_query_plan", (const char *)feat) ) {
         ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"0", NULL, uri_xsd_unsignedShort);
     }
     librdf_free_uri(uri_xsd_boolean);
@@ -1148,20 +1148,22 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
         return 0;
     }
 
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/profile", (const char *)feat) ) {
+    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/profile", (const char *)feat) ) {
         const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
-        if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) )
+        if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) ) {
             db_ctx->do_profile = BOOL_YES;
-        else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) )
+            sqlite3_profile(db_ctx->db, &profile, NULL);
+        } else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) ) {
             db_ctx->do_profile = BOOL_NO;
-        else {
+            sqlite3_profile(db_ctx->db, NULL, NULL);
+        } else {
             librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:boolean", feat, val);
             return 2;
         }
         return 0;
     }
 
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/explain_query_plan", (const char *)feat) ) {
+    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/explain_query_plan", (const char *)feat) ) {
         const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
         if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) )
             db_ctx->do_explain_query_plan = BOOL_YES;

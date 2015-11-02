@@ -56,6 +56,13 @@ static char *_main(int argc, char *argv[])
         fprintf(stderr, "%s: Failed to create new storage\n", program);
         mu_assert("Failed to create storage", 0);
     }
+    {
+        librdf_uri *uri_xsd_boolean = librdf_new_uri(world, (const unsigned char *)"http://www.w3.org/2000/10/XMLSchema#" "boolean");
+        librdf_uri *f_uri = librdf_new_uri(world, LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/explain_query_plan");
+        librdf_storage_set_feature( storage, f_uri, librdf_new_node_from_typed_literal(world, (const unsigned char *)"1", NULL, uri_xsd_boolean) );
+        librdf_free_uri(uri_xsd_boolean);
+        librdf_free_uri(f_uri);
+    }
 
     librdf_model *model = librdf_new_model(world, storage, NULL);
     if( !model ) {
@@ -77,6 +84,15 @@ static char *_main(int argc, char *argv[])
         mu_assert("Failed to parse RDF", 0);
     }
     librdf_free_parser(parser);
+
+    {
+        // now as we're done inserting: start profiling..
+        librdf_uri *uri_xsd_boolean = librdf_new_uri(world, (const unsigned char *)"http://www.w3.org/2000/10/XMLSchema#" "boolean");
+        librdf_uri *f_uri = librdf_new_uri(world, LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/profile");
+        librdf_storage_set_feature( storage, f_uri, librdf_new_node_from_typed_literal(world, (const unsigned char *)"1", NULL, uri_xsd_boolean) );
+        librdf_free_uri(uri_xsd_boolean);
+        librdf_free_uri(f_uri);
+    }
 
     librdf_statement *statement2 =
         librdf_new_statement_from_nodes(world, librdf_new_node_from_uri_string(world, (const unsigned char *)
