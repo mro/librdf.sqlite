@@ -219,7 +219,7 @@ char *test_main()
 {
     char src_uri[1024] = "file://";
     MUAssert(getcwd( src_uri + strlen(src_uri), sizeof(src_uri) - strlen(src_uri) ), "Failed to get current working dir.");
-    strncat( src_uri, "/test-example1.ttl", sizeof(src_uri) - strlen(src_uri) );
+    strncat(src_uri, "/test-example1.ttl", sizeof(src_uri) - strlen(src_uri) - 1);
     char *argv[] = {
         "test-example1", src_uri, "turtle", NULL
     };
