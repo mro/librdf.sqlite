@@ -27,7 +27,14 @@
 
 #include "rdf_storage_sqlite_mro.h"
 
-const char *LIBRDF_STORAGE_SQLITE_MRO = LIBRDF_STORAGE_SQLITE_MRO_;
+#define NAMESPACE "http://purl.mro.name/rdf/sqlite/"
+const char *LIBRDF_STORAGE_SQLITE_MRO = NAMESPACE;
+
+const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK = (unsigned char *)NAMESPACE "feature/sql/cache/mask";
+const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE = (unsigned char *)NAMESPACE "feature/sqlite3/profile";
+const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN = (unsigned char *)NAMESPACE "feature/sqlite3/explain_query_plan";
+
+#define LIBRDF_NAMESPACE_XSD "http://www.w3.org/2000/10/XMLSchema#"
 
 #include <stdlib.h>
 // #include <stdio.h>
@@ -38,6 +45,7 @@ const char *LIBRDF_STORAGE_SQLITE_MRO = LIBRDF_STORAGE_SQLITE_MRO_;
 #include <sqlite3.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #if DEBUG
 #undef NDEBUG
@@ -685,6 +693,130 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
 
 #pragma mark Public Interface
 
+
+/** Convenience */
+void librdf_storage_set_feature_mro_bool(librdf_storage *storage, const unsigned char *feature, const bool value)
+{
+    assert(storage && "storage must be set.");
+    assert(feature && "feature must be set.");
+    librdf_world *world = librdf_storage_get_world(storage);
+    assert(world && "world must be set.");
+
+    librdf_uri *uri_xsd_boolean = librdf_new_uri(world, (str_uri_t)LIBRDF_NAMESPACE_XSD "boolean");
+    assert(uri_xsd_boolean && "uri_xsd_boolean must be set.");
+    librdf_uri *uri_f = librdf_new_uri(world, feature);
+    assert(uri_f && "uri_f must be set.");
+    const str_lit_val_t v = (str_lit_val_t)(value ? "true" : "false");
+    // librdf_log(get_world(storage), 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "librdf_storage_set_feature_mro_bool sets '%s'", v);
+    librdf_node *n = librdf_new_node_from_typed_literal(world, v, NULL, uri_xsd_boolean);
+
+    librdf_storage_set_feature(storage, uri_f, n);
+
+    librdf_free_node(n);
+    librdf_free_uri(uri_f);
+    librdf_free_uri(uri_xsd_boolean);
+}
+
+
+/** Convenience */
+void librdf_storage_set_feature_mro_int(librdf_storage *storage, const unsigned char *feature, const int value)
+{
+    assert(storage && "storage must be set.");
+    assert(feature && "feature must be set.");
+    librdf_world *world = librdf_storage_get_world(storage);
+
+    assert(world && "world must be set.");
+    librdf_uri *uri_xsd_integer = librdf_new_uri(world, (str_uri_t)LIBRDF_NAMESPACE_XSD "integer");
+    assert(uri_xsd_integer && "uri_xsd_integer must be set.");
+    librdf_uri *uri_f = librdf_new_uri(world, feature);
+    assert(uri_f && "uri_f must be set.");
+    char v[20];
+    snprintf(v, sizeof(v), "%d", value);
+    librdf_node *n = librdf_new_node_from_typed_literal(world, (str_lit_val_t)v, NULL, uri_xsd_integer);
+
+    librdf_storage_set_feature(storage, uri_f, n);
+
+    librdf_free_node(n);
+    librdf_free_uri(uri_f);
+    librdf_free_uri(uri_xsd_integer);
+}
+
+
+/** Convenience */
+int librdf_storage_get_feature_mro_bool(librdf_storage *storage, const unsigned char *feature, bool *value)
+{
+    assert(storage && "storage must be set.");
+    assert(feature && "feature must be set.");
+    int err = 0;
+    librdf_world *world = librdf_storage_get_world(storage);
+    assert(world && "feature must be set.");
+    librdf_uri *uri_f = librdf_new_uri(world, feature);
+    bool ret = false;
+    if( uri_f ) {
+        librdf_node *node = librdf_storage_get_feature(storage, uri_f);
+        if( node ) {
+            if( LIBRDF_NODE_TYPE_LITERAL == node_type(node) ) {
+                size_t len = 0;
+                const char *v = (char *)librdf_node_get_literal_value_as_counted_string(node, &len);
+                if( v ) {
+                    // librdf_log(get_world(storage), 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "librdf_storage_get_feature_mro_bool return '%s'", v);
+                    if( 0 == strcmp("true", v) || 0 == strcmp("1", v) )
+                        ret = true;
+                    else if( 0 == strcmp("false", v) || 0 == strcmp("0", v) )
+                        ret = false;
+                    else
+                        err = 4;
+                } else
+                    err = 3;
+            } else
+                err = 2;
+            // librdf_free_node(n);
+        } else
+            err = 1;
+        librdf_free_uri(uri_f);
+    }
+    if( value )
+        *value = ret;
+    return err;
+}
+
+
+/** Convenience */
+int librdf_storage_get_feature_mro_int(librdf_storage *storage, const unsigned char *feature, int *value)
+{
+    assert(storage && "storage must be set.");
+    assert(feature && "feature must be set.");
+    int err = 0;
+    librdf_world *world = librdf_storage_get_world(storage);
+    assert(world && "feature must be set.");
+    librdf_uri *uri_f = librdf_new_uri(world, feature);
+    long ret = 0;
+    if( uri_f ) {
+        librdf_node *node = librdf_storage_get_feature(storage, uri_f);
+        if( node ) {
+            if( LIBRDF_NODE_TYPE_LITERAL == node_type(node) ) {
+                size_t len = 0;
+                const char *v = (char *)librdf_node_get_literal_value_as_counted_string(node, &len);
+                if( v ) {
+                    char *end = NULL;
+                    ret = strtol(v, &end, 10);
+                    if( '\0' != *end )
+                        err = 4;
+                } else
+                    err = 3;
+            } else
+                err = 2;
+            // librdf_free_node(n);
+        } else
+            err = 1;
+        librdf_free_uri(uri_f);
+    }
+    if( value )
+        *value = ret;
+    return err;
+}
+
+
 #pragma mark Lifecycle & Housekeeping
 
 
@@ -1090,25 +1222,30 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
  **/
 static librdf_node *pub_get_feature(librdf_storage *storage, librdf_uri *feature)
 {
+    assert(storage && "storage must be set");
     if( !feature )
         return NULL;
-    const unsigned char *feat = librdf_uri_as_string(feature);
+    const char *feat = (char *)librdf_uri_as_string(feature);
     if( !feat )
         return NULL;
+    instance_t *db_ctx = get_instance(storage);
+
     librdf_node *ret = NULL;
-    librdf_uri *uri_xsd_boolean = librdf_new_uri(get_world(storage), (const unsigned char *)"http://www.w3.org/2000/10/XMLSchema#" "boolean");
-    librdf_uri *uri_xsd_unsignedShort = librdf_new_uri(get_world(storage), (const unsigned char *)"http://www.w3.org/2000/10/XMLSchema#" "unsignedShort");
-    if( !ret && 0 == strcmp(LIBRDF_MODEL_FEATURE_CONTEXTS, (const char *)feat) )
-        ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"0", NULL, uri_xsd_boolean);
-    if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", (const char *)feat) ) {
-        ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"1023", NULL, uri_xsd_unsignedShort);
+    librdf_uri *uri_xsd_boolean = librdf_new_uri(get_world(storage), (str_uri_t)"http://www.w3.org/2000/10/XMLSchema#" "boolean");
+    librdf_uri *uri_xsd_unsignedShort = librdf_new_uri(get_world(storage), (str_uri_t)"http://www.w3.org/2000/10/XMLSchema#" "unsignedShort");
+
+    if( !ret && 0 == strcmp(LIBRDF_MODEL_FEATURE_CONTEXTS, feat) )
+        ret = librdf_new_node_from_typed_literal(get_world(storage), (str_lit_val_t)(false ? "true" : "false"), NULL, uri_xsd_boolean);
+    if( !ret && 0 == strcmp( (char *)LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, feat ) )
+        ret = librdf_new_node_from_typed_literal(get_world(storage), (str_lit_val_t)(db_ctx->do_profile ? "true" : "false"), NULL, uri_xsd_boolean);
+    if( !ret && 0 == strcmp( (char *)LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN, (char *)feat ) )
+        ret = librdf_new_node_from_typed_literal(get_world(storage), (str_lit_val_t)(db_ctx->do_explain_query_plan ? "true" : "false"), NULL, uri_xsd_boolean);
+    if( !ret && 0 == strcmp( (char *)LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK, feat ) ) {
+        char buf[10];
+        snprintf(buf, sizeof(buf) - 1, "%d", db_ctx->sql_cache_mask);
+        ret = librdf_new_node_from_typed_literal(get_world(storage), (str_uri_t)buf, NULL, uri_xsd_unsignedShort);
     }
-    if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/profile", (const char *)feat) ) {
-        ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"0", NULL, uri_xsd_unsignedShort);
-    }
-    if( !ret && 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/explain_query_plan", (const char *)feat) ) {
-        ret = librdf_new_node_from_typed_literal(get_world(storage), (const unsigned char *)"0", NULL, uri_xsd_unsignedShort);
-    }
+
     librdf_free_uri(uri_xsd_boolean);
     librdf_free_uri(uri_xsd_unsignedShort);
     return ret;
@@ -1127,35 +1264,38 @@ static librdf_node *pub_get_feature(librdf_storage *storage, librdf_uri *feature
  **/
 static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_node *value)
 {
+    assert(storage && "storage must be set");
     if( !feature )
         return -1;
-    const str_uri_t feat = (const str_uri_t)librdf_uri_as_string(feature);
+    const char *feat = (char *)librdf_uri_as_string(feature);
     if( !feat )
         return -1;
+    const char *val = (char *)librdf_node_get_literal_value(value);
+
+    // librdf_log(get_world(storage), 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "pub_set_feature('%s', '%s')", feat, val);
+
     instance_t *db_ctx = get_instance(storage);
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", (const char *)feat) ) {
-        const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
-        if( 0 == strcmp("0", (const char *)val) ) {
+    if( 0 == strcmp( (char *)LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK, feat ) ) {
+        if( 0 == strcmp("0", val) ) {
             db_ctx->sql_cache_mask = 0;
         } else {
-            const int i = atoi( (const char *)val );
+            const int i = atoi(val);
             if( 0 >= i ) {
                 librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:unsignedShort", feat, val);
                 return 3;
             }
             db_ctx->sql_cache_mask = ALL_PARAMS & i; // clip range
         }
-        librdf_log(NULL, 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "good value: <%s> \"%d\"^^xsd:unsignedShort", feat, db_ctx->sql_cache_mask);
+        // librdf_log(NULL, 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "good value: <%s> \"%d\"^^xsd:unsignedShort", feat, db_ctx->sql_cache_mask);
         return 0;
     }
 
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/profile", (const char *)feat) ) {
-        const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
-        if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) ) {
+    if( 0 == strcmp( (char *)LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, feat ) ) {
+        if( 0 == strcmp("1", val) || 0 == strcmp("true", val) ) {
             db_ctx->do_profile = true;
             if( db_ctx->db )
                 sqlite3_profile(db_ctx->db, &profile, storage);
-        } else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) ) {
+        } else if( 0 == strcmp("0", val) || 0 == strcmp("false", val) ) {
             db_ctx->do_profile = false;
             if( db_ctx->db )
                 sqlite3_profile(db_ctx->db, NULL, NULL);
@@ -1166,11 +1306,10 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
         return 0;
     }
 
-    if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/explain_query_plan", (const char *)feat) ) {
-        const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
-        if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) )
+    if( 0 == strcmp( (char *)LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN, feat ) ) {
+        if( 0 == strcmp("1", val) || 0 == strcmp("true", val) )
             db_ctx->do_explain_query_plan = true;
-        else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) )
+        else if( 0 == strcmp("0", val) || 0 == strcmp("false", val) )
             db_ctx->do_explain_query_plan = false;
         else {
             librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:boolean", feat, val);
@@ -1466,7 +1605,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
             strncpy(strstr(sql, "AND c_uri_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND c_uri_id' not found in find_triples.sql");
 
-        librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Created SQL statement #%d %s", idx, sql);
+        librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Created SQL statement #%d", idx);
         prep_stmt(db_ctx->db, &stmt, sql);
         if( params == (db_ctx->sql_cache_mask & params) )
             // decide whether to keep the sqlite3_statement for reuse or not.
@@ -1479,8 +1618,10 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     const sqlite_rc_t rc = bind_stmt(db_ctx, statement, context_node, stmt);
     assert(SQLITE_OK == rc && "find_statements: failed to bind SQL parameters");
 
-    if( db_ctx->do_explain_query_plan )
+    if( db_ctx->do_explain_query_plan ) {
+        librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Execute SQL statement #%d", idx);
         printExplainQueryPlan(stmt);
+    }
 
     librdf_world *w = get_world(storage);
     // create iterator

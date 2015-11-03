@@ -22,30 +22,14 @@
 // IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
+#define LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE 1
 #include "../rdf_storage_sqlite_mro.h"
-#include <stdbool.h>
-
-/** Convenience */
-static void librdf_storage_set_feature_boolean(librdf_storage *storage, const char *feature, const bool value)
-{
-    librdf_world *world = librdf_storage_get_world(storage);
-    librdf_uri *uri_xsd_boolean =
-        librdf_new_uri(world, (const unsigned char *)"http://www.w3.org/2000/10/XMLSchema#" "boolean");
-    librdf_uri *f_uri = librdf_new_uri(world, (const unsigned char *)feature);
-    librdf_storage_set_feature( storage, f_uri,
-                                librdf_new_node_from_typed_literal(world,
-                                                                   (const unsigned char *)(value ? "true" : "false"),
-                                                                   NULL, uri_xsd_boolean) );
-    librdf_free_uri(uri_xsd_boolean);
-    librdf_free_uri(f_uri);
-}
 
 
 #include "mtest.h"
 #include "ansi-colors.h"
 #include <unistd.h>
 #include <string.h>
-// #include <errno.h>
 #include <time.h>
 
 int tests_run = 0;
@@ -89,7 +73,7 @@ static char *_main(int argc, char *argv[])
     librdf_storage *storage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-example1.sqlite",
                                                  "new='on', contexts='no', synchronous='off'");
     MUAssert(storage, "Failed to create storage");
-    librdf_storage_set_feature_boolean(storage, LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/explain_query_plan", true);
+    librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN, true);
 
     librdf_model *model = librdf_new_model(world, storage, NULL);
     MUAssert(model, "Failed to create model");
@@ -114,7 +98,7 @@ static char *_main(int argc, char *argv[])
     }
 
     // now as we're done inserting: start profiling..
-    librdf_storage_set_feature_boolean(storage, LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/profile", true);
+    librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, true);
 
     {
         librdf_statement *statement2 =

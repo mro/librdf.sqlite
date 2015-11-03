@@ -33,14 +33,43 @@
 /** Factory name.
  *
  */
-#define LIBRDF_STORAGE_SQLITE_MRO_ "http://purl.mro.name/rdf/sqlite/"
 extern const char *LIBRDF_STORAGE_SQLITE_MRO;
+
+/** Which triple-find-queries should be cached. Bitmask, http://www.w3.org/2000/10/XMLSchema#unsignedShort. Clipped to 0x1FF.
+ */
+extern const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK;
+
+/** Register sqlite3_profile or not. http://www.w3.org/2000/10/XMLSchema#boolean.
+ */
+extern const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE;
+
+/** Print (some) sqlite3 'EXPLAIN QUERY PLAN' or not. http://www.w3.org/2000/10/XMLSchema#boolean.
+ */
+extern const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN;
+
+#ifndef LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
+#define LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE 0
+#endif
+
+#if LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
+#include <stdbool.h>
+#include <errno.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 void librdf_init_storage_sqlite_mro(librdf_world *world);
+
+#if LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
+void librdf_storage_set_feature_mro_bool(librdf_storage *storage, const unsigned char *feature, const bool value);
+void librdf_storage_set_feature_mro_int(librdf_storage *storage, const unsigned char *feature, const int value);
+
+int librdf_storage_get_feature_mro_bool(librdf_storage *storage, const unsigned char *feature, bool *value);
+int librdf_storage_get_feature_mro_int(librdf_storage *storage, const unsigned char *feature, int *value);
+
+#endif
 
 #ifdef __cplusplus
 } // extern "C"
