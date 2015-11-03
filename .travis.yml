@@ -10,4 +10,4 @@ addons:
 compiler:
   - gcc
   - clang
-script: bash test/run.sh
+script: make -C test test

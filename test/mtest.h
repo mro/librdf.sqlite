@@ -38,11 +38,11 @@
 #define MUTestRun(test) do { \
     const char *marker = TOSTRING(test); \
     printf("travis_fold:start:%s\n", marker); \
-    const long long unsigned int t_start = 5e7 + clock() * (1.0e9 / CLOCKS_PER_SEC); \
+    const long long unsigned int t_start = clock() * (1.0e9 / CLOCKS_PER_SEC); \
     printf("travis_time:start:%s_time\n", marker); \
     char *message = test(); tests_run++; \
     printf("%s%s %s %s\n", message ? (ANSI_COLOR_F_RED "✗") : (ANSI_COLOR_F_GREEN "✓"), ANSI_COLOR_RESET, marker, message ? message : ""); \
-    const long long unsigned int t_finish = 7.5e7 + clock() * (1.0e9 / CLOCKS_PER_SEC); \
+    const long long unsigned int t_finish = clock() * (1.0e9 / CLOCKS_PER_SEC); \
     printf("travis_time:end:%s_time:start=%llu,finish=%llu,duration=%llu\n", marker, t_start, t_finish, t_finish-t_start); \
     printf("travis_fold:end:%s\n", marker); \
     if( message ) return message; \
