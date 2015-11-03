@@ -344,6 +344,8 @@ static void trace(void *context, const char *sql)
 // http://stackoverflow.com/a/6618833
 static void profile(void *context, const char *sql, const sqlite3_uint64 ns)
 {
+    librdf_storage *storage = (librdf_storage *)context;
+    instance_t *db_ctx = get_instance_t(storage);
     fprintf(stderr, "dt=%llu ns Query SQL: %s\n", ns, sql);
 }
 
@@ -1152,10 +1154,12 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
         const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
         if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) ) {
             db_ctx->do_profile = BOOL_YES;
-            sqlite3_profile(db_ctx->db, &profile, NULL);
+            if( db_ctx->db )
+                sqlite3_profile(db_ctx->db, &profile, storage);
         } else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) ) {
             db_ctx->do_profile = BOOL_NO;
-            sqlite3_profile(db_ctx->db, NULL, NULL);
+            if( db_ctx->db )
+                sqlite3_profile(db_ctx->db, NULL, NULL);
         } else {
             librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:boolean", feat, val);
             return 2;
