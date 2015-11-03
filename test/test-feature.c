@@ -174,7 +174,15 @@ static char *test_int_rw_fail()
 
 static char *all_tests()
 {
+	{
+		printf("travis_fold:start:%s\n", "test_bool_defaults");
+		const long long unsigned int t_start = clock() * 1.0e9 / CLOCKS_PER_SEC;
+		printf("travis_time:start:%s\n", "test_bool_defaults");
     mu_run_test(test_bool_defaults);
+		const long long unsigned int t_finish = clock() * 1.0e9 / CLOCKS_PER_SEC;
+		printf("travis_time:end:%s:start=%llu,finish=%llu,duration=%llu\n", "test_bool_defaults", t_start, t_finish, t_finish-t_start);
+		printf("travis_fold:end:%s\n", "test_bool_defaults");
+	}
     mu_run_test(test_bool_rw_ok);
     mu_run_test(test_bool_rw_fail);
     mu_run_test(test_int_defaults);
