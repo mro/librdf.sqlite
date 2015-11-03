@@ -27,4 +27,7 @@
 // parameter order like XCTAssert, STAssert or NSAssert
 //
 // STAssert from http://www.sente.ch/software/ocunit/
-#define MUAssert(cond, message) mu_assert(message, cond)
+// http://www.decompile.com/cpp/faq/file_and_line_error_string.htm
+#define STRINGIFY(x) # x
+#define TOSTRING(x) STRINGIFY(x)
+#define MUAssert(cond, message) mu_assert(__FILE__ ":" TOSTRING(__LINE__) " " message, cond)
