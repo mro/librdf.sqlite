@@ -27,6 +27,18 @@
 #include "../rdf_storage_sqlite_mro.h"
 
 #include "mtest.h"
+
+#define MUTestRun(test) do { \
+		const char *marker = __FILE__ "_" TOSTRING(__LINE__); \
+		printf("travis_fold:start:%s\n", marker); \
+		const long long unsigned int t_start = 5e8 + clock() * 1.0e9 / CLOCKS_PER_SEC; \
+		printf("travis_time:start:t_%s\n", marker); \
+    mu_run_test(test); \
+		const long long unsigned int t_finish = 7.5e8 + clock() * 1.0e9 / CLOCKS_PER_SEC; \
+		printf("travis_time:end:t_%s:start=%llu,finish=%llu,duration=%llu\n", marker, t_start, t_finish, t_finish-t_start); \
+		printf("travis_fold:end:%s\n", marker); \
+} while( 0 )
+
 #include "ansi-colors.h"
 #include <unistd.h>
 #include <string.h>
@@ -177,13 +189,13 @@ static char *all_tests()
 	{
 		printf("travis_fold:start:%s\n", "test_bool_defaults");
 		const long long unsigned int t_start = clock() * 1.0e9 / CLOCKS_PER_SEC;
-		printf("travis_time:start:%s\n", "test_bool_defaults");
+		printf("travis_time:start:%s\n", "test_bool_defaults");		
     mu_run_test(test_bool_defaults);
 		const long long unsigned int t_finish = clock() * 1.0e9 / CLOCKS_PER_SEC;
 		printf("travis_time:end:%s:start=%llu,finish=%llu,duration=%llu\n", "test_bool_defaults", t_start, t_finish, t_finish-t_start);
 		printf("travis_fold:end:%s\n", "test_bool_defaults");
 	}
-    mu_run_test(test_bool_rw_ok);
+    MUTestRun(test_bool_rw_ok);
     mu_run_test(test_bool_rw_fail);
     mu_run_test(test_int_defaults);
     mu_run_test(test_int_rw_ok);
