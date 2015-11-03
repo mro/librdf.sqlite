@@ -34,7 +34,7 @@
     printf("travis_fold:start:%s\r", marker); \
     const long long unsigned int t_start = 5e8 + clock() * 1.0e9 / CLOCKS_PER_SEC; \
     printf("travis_time:start:%s_time\r", marker); \
-    const char *message = test(); tests_run++; \
+    char *message = test(); tests_run++; \
     const long long unsigned int t_finish = 7.5e8 + clock() * 1.0e9 / CLOCKS_PER_SEC; \
     printf("travis_time:end:%s_time:start=%llu,finish=%llu,duration=%llu\r", marker, t_start, t_finish, t_finish-t_start); \
     printf("travis_fold:end:%s\r", marker); \
