@@ -37,6 +37,7 @@ const char *LIBRDF_STORAGE_SQLITE_MRO = LIBRDF_STORAGE_SQLITE_MRO_;
 #include <rdf_storage.h>
 #include <sqlite3.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #if DEBUG
 #undef NDEBUG
@@ -49,14 +50,9 @@ const char *LIBRDF_STORAGE_SQLITE_MRO = LIBRDF_STORAGE_SQLITE_MRO_;
 
 #pragma mark Basic Types & Constants
 
-typedef enum {
-    BOOL_NO = 0,
-    BOOL_YES = 1
-} boolean_t;
-
 typedef sqlite3_uint64 hash_t;
 static const hash_t NULL_ID = 0;
-static inline boolean_t isNULL_ID(const hash_t x)
+static inline bool isNULL_ID(const hash_t x)
 {
     return NULL_ID == x;
 }
@@ -106,12 +102,12 @@ typedef struct
     librdf_digest *digest;
 
     const char *name;
-    boolean_t is_new;
+    bool is_new;
     syncronous_flag_t synchronous;
-    boolean_t in_transaction;
+    bool in_transaction;
 
-    boolean_t do_profile;
-    boolean_t do_explain_query_plan;
+    bool do_profile;
+    bool do_explain_query_plan;
     sql_find_param_t sql_cache_mask;
 
     // compiled statements, lazy init
@@ -577,7 +573,7 @@ static sqlite_rc_t transaction_start(librdf_storage *storage)
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_start), "BEGIN IMMEDIATE TRANSACTION;") );
     db_ctx->in_transaction = SQLITE_DONE == rc;
-    assert(db_ctx->in_transaction != BOOL_NO && "ouch");
+    assert(db_ctx->in_transaction != false && "ouch");
     return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
@@ -587,11 +583,11 @@ static sqlite_rc_t transaction_commit(librdf_storage *storage, const sqlite_rc_t
     if( begin != SQLITE_OK )
         return SQLITE_OK;
     instance_t *db_ctx = get_instance(storage);
-    if( BOOL_NO == db_ctx->in_transaction )
+    if( false == db_ctx->in_transaction )
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_commit), "COMMIT  TRANSACTION;") );
     db_ctx->in_transaction = !(SQLITE_DONE == rc);
-    assert(BOOL_NO == db_ctx->in_transaction && "ouch");
+    assert(false == db_ctx->in_transaction && "ouch");
     return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
@@ -601,11 +597,11 @@ static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc
     if( begin != SQLITE_OK )
         return SQLITE_OK;
     instance_t *db_ctx = get_instance(storage);
-    if( BOOL_NO == db_ctx->in_transaction )
+    if( false == db_ctx->in_transaction )
         return SQLITE_MISUSE;
     const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_rollback), "ROLLBACK TRANSACTION;") );
     db_ctx->in_transaction = !(SQLITE_DONE == rc);
-    assert(BOOL_NO == db_ctx->in_transaction && "ouch");
+    assert(false == db_ctx->in_transaction && "ouch");
     return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
@@ -632,7 +628,7 @@ typedef enum {
 idx_triple_column_t;
 
 
-static librdf_statement *find_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement, const boolean_t create)
+static librdf_statement *find_statement(librdf_storage *storage, librdf_node *context_node, librdf_statement *statement, const bool create)
 {
     assert(statement && "statement must be set.");
     assert(librdf_statement_is_complete(statement) && "statement must be complete.");
@@ -705,8 +701,8 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
         return RET_ERROR;
     }
     // feature defaults
-    db_ctx->do_profile = BOOL_NO;
-    db_ctx->do_explain_query_plan = BOOL_NO;
+    db_ctx->do_profile = false;
+    db_ctx->do_explain_query_plan = false;
     db_ctx->sql_cache_mask = ALL_PARAMS;
 
     librdf_storage_set_instance(storage, db_ctx);
@@ -725,8 +721,8 @@ static int pub_init(librdf_storage *storage, const char *name, librdf_hash *opti
         return RET_ERROR;
     }
 
-    if( BOOL_NO != librdf_hash_get_as_boolean(options, "new") )
-        db_ctx->is_new = BOOL_YES;  /* default is NOT NEW */
+    if( false != librdf_hash_get_as_boolean(options, "new") )
+        db_ctx->is_new = true;  /* default is NOT NEW */
 
     /* Redland default is "PRAGMA synchronous normal" */
     db_ctx->synchronous = SYNC_NORMAL;
@@ -801,7 +797,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
 {
     instance_t *db_ctx = get_instance(storage);
 
-    const boolean_t file_exists = ( 0 == access(db_ctx->name, F_OK) );
+    const bool file_exists = ( 0 == access(db_ctx->name, F_OK) );
     if( db_ctx->is_new && file_exists )
         unlink(db_ctx->name);
 
@@ -1153,11 +1149,11 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
     if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/profile", (const char *)feat) ) {
         const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
         if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) ) {
-            db_ctx->do_profile = BOOL_YES;
+            db_ctx->do_profile = true;
             if( db_ctx->db )
                 sqlite3_profile(db_ctx->db, &profile, storage);
         } else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) ) {
-            db_ctx->do_profile = BOOL_NO;
+            db_ctx->do_profile = false;
             if( db_ctx->db )
                 sqlite3_profile(db_ctx->db, NULL, NULL);
         } else {
@@ -1170,9 +1166,9 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
     if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sqlite3/explain_query_plan", (const char *)feat) ) {
         const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
         if( 0 == strcmp("1", (const char *)val) || 0 == strcmp("true", (const char *)val) )
-            db_ctx->do_explain_query_plan = BOOL_YES;
+            db_ctx->do_explain_query_plan = true;
         else if( 0 == strcmp("0", (const char *)val) || 0 == strcmp("false", (const char *)val) )
-            db_ctx->do_explain_query_plan = BOOL_NO;
+            db_ctx->do_explain_query_plan = false;
         else {
             librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:boolean", feat, val);
             return 2;
@@ -1217,8 +1213,8 @@ typedef struct
     sqlite3_stmt *stmt;
     sqlite_rc_t txn;
     sqlite_rc_t rc;
-    boolean_t dirty;
-    boolean_t keep_stmt;
+    bool dirty;
+    bool keep_stmt;
 }
 iterator_t;
 
@@ -1237,7 +1233,7 @@ static int pub_iter_next_statement(void *_ctx)
     iterator_t *ctx = (iterator_t *)_ctx;
     if( pub_iter_end_of_stream(ctx) )
         return RET_ERROR;
-    ctx->dirty = BOOL_YES;
+    ctx->dirty = true;
     ctx->rc = sqlite3_step(ctx->stmt);
     if( pub_iter_end_of_stream(ctx) )
         return RET_ERROR;
@@ -1315,7 +1311,7 @@ static void *pub_iter_get_statement(void *_ctx, const int _flags)
             assert(librdf_statement_is_complete(st) && "found statement must be complete");
             assert(NULL == ctx->pattern || librdf_statement_match(st, ctx->pattern) && "match candidate doesn't match.");
             assert(st == ctx->statement && "mismatch.");
-            ctx->dirty = BOOL_NO;
+            ctx->dirty = false;
         }
         assert(librdf_statement_is_complete(ctx->statement) && "found statement must be complete");
         assert(NULL == ctx->pattern || librdf_statement_match(ctx->statement, ctx->pattern) && "match candidate doesn't match.");
@@ -1372,7 +1368,7 @@ static librdf_iterator *pub_get_contexts(librdf_storage *storage)
 
 static int pub_contains_statement(librdf_storage *storage, librdf_statement *statement)
 {
-    return NULL != find_statement(storage, NULL, statement, BOOL_NO);
+    return NULL != find_statement(storage, NULL, statement, false);
 }
 
 
@@ -1472,7 +1468,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
         if( params == (db_ctx->sql_cache_mask & params) )
             // decide whether to keep the sqlite3_statement for reuse or not.
             db_ctx->stmt_triple_finds[idx] = stmt;
-    } // else if( BOOL_NO ) {
+    } // else if( false ) {
       // toggle via "profile" feature?
       // librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
       // }
@@ -1493,7 +1489,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     iter->txn = begin;
     iter->rc = sqlite3_step(stmt);
     iter->statement = librdf_new_statement(w);
-    iter->dirty = BOOL_YES;
+    iter->dirty = true;
     iter->keep_stmt = (db_ctx->stmt_triple_finds[idx] == stmt); // keep sqlite3_statement only if cached.
 
     librdf_storage_add_reference(iter->storage);
@@ -1531,7 +1527,7 @@ static int pub_context_add_statement(librdf_storage *storage, librdf_node *conte
     if( !statement )
         return RET_OK;
     // librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
-    return NULL == find_statement(storage, context_node, statement, BOOL_YES) ? RET_ERROR : RET_OK;
+    return NULL == find_statement(storage, context_node, statement, true) ? RET_ERROR : RET_OK;
 }
 
 
