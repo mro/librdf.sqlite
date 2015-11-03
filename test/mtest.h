@@ -31,3 +31,18 @@
 #define STRINGIFY(x) # x
 #define TOSTRING(x) STRINGIFY(x)
 #define MUAssert(cond, message) mu_assert(__FILE__ ":" TOSTRING(__LINE__) " " message, cond)
+
+#include "ansi-colors.h"
+
+#define MUTestRun(test) do { \
+    const char *marker = TOSTRING(test); \
+    printf("travis_fold:start:%s\r", marker); \
+    const long long unsigned int t_start = 5e8 + clock() * 1.0e9 / CLOCKS_PER_SEC; \
+    printf("travis_time:start:%s_time\r", marker); \
+    char *message = test(); tests_run++; \
+    const long long unsigned int t_finish = 7.5e8 + clock() * 1.0e9 / CLOCKS_PER_SEC; \
+    printf("travis_time:end:%s_time:start=%llu,finish=%llu,duration=%llu\r", marker, t_start, t_finish, t_finish-t_start); \
+    printf("travis_fold:end:%s\r", marker); \
+    printf("%s%s %s %s\n", message ? (ANSI_COLOR_F_RED "✗") : (ANSI_COLOR_F_GREEN "✓"), ANSI_COLOR_RESET, marker, message ? message : ""); \
+    if( message ) return message; \
+} while( 0 )

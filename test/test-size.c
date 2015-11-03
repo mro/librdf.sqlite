@@ -90,8 +90,8 @@ static char *test_size0()
 
 static char *all_tests()
 {
-    mu_run_test(test_assert);
-    mu_run_test(test_size0);
+    MUTestRun(test_assert);
+    MUTestRun(test_size0);
     return 0;
 }
 

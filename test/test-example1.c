@@ -38,7 +38,7 @@ static char *test_main();
 
 static char *all_tests()
 {
-    mu_run_test(test_main);
+    MUTestRun(test_main);
     return NULL;
 }
 
