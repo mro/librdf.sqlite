@@ -51,7 +51,7 @@ BGC_WHITE="\033[7;37m"
 
 status_code=0
 
-run_test() {
+run_c_test() {
   test_src="$1"
   test_name="$test_src"
 
@@ -79,8 +79,9 @@ run_test() {
   fi
 }
 
-run_test test-feature.c
-run_test test-size.c
-run_test test-example1.c
+for tst in test-*.c
+do
+  run_c_test "$tst"
+done
 
 exit $status_code

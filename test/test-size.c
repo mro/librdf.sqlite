@@ -27,10 +27,8 @@
 
 
 #include "mtest.h"
-#include "ansi-colors.h"
 #include <unistd.h>
 #include <string.h>
-#include <time.h>
 
 int tests_run = 0;
 

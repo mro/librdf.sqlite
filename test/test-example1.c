@@ -25,12 +25,9 @@
 #define LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE 1
 #include "../rdf_storage_sqlite_mro.h"
 
-
 #include "mtest.h"
-#include "ansi-colors.h"
 #include <unistd.h>
 #include <string.h>
-#include <time.h>
 
 int tests_run = 0;
 
