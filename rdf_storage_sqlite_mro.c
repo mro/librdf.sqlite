@@ -247,17 +247,19 @@ static hash_t node_hash_literal(librdf_node *node, librdf_digest *digest)
         return NULL_ID;
     assert(digest && "digest must be set.");
     librdf_digest_init(digest);
-    size_t len = 0;
-    unsigned char *s = librdf_node_get_literal_value_as_counted_string(node, &len);
-    assert(s && "literal without value");
-    librdf_digest_update(digest, s, len);
-
+    {
+        size_t len = 0;
+        unsigned char *str = librdf_node_get_literal_value_as_counted_string(node, &len);
+        assert(str && "literal without value");
+        assert(strlen((char*)str) == len && "TODO: NUL terminate or limit length!");
+        librdf_digest_update(digest, str, len);
+    }
     librdf_uri *uri = librdf_node_get_literal_value_datatype_uri(node);
     if( uri ) {
+        size_t len = 0;
         const unsigned char *str = librdf_uri_as_counted_string(uri, &len);
         librdf_digest_update(digest, str, len);
     }
-
     const char *l = librdf_node_get_literal_value_language(node);
     if( l )
         librdf_digest_update( digest, (unsigned char *)l, strlen(l) );
@@ -542,6 +544,7 @@ static sqlite_rc_t bind_stmt(instance_t *db_ctx, librdf_statement *statement, li
             if( SQLITE_OK != ( rc = bind_text( stmt, ":o_language", (unsigned char *)l, strlen(l) ) ) ) return rc;
         size_t len = 0;
         const unsigned char *str = librdf_node_get_literal_value_as_counted_string(o, &len);
+        assert(strlen((char*)str) == len && "TODO: NUL terminate or limit length!");
         if( SQLITE_OK != ( rc = bind_text(stmt, ":o_text", str, len) ) ) return rc;
     }
 
@@ -748,7 +751,7 @@ int librdf_storage_get_feature_mro_bool(librdf_storage *storage, const unsigned 
 {
     assert(storage && "storage must be set.");
     assert(feature && "feature must be set.");
-    int err = 0;
+    int err = RET_OK;
     librdf_world *world = librdf_storage_get_world(storage);
     assert(world && "feature must be set.");
     librdf_uri *uri_f = librdf_new_uri(world, feature);
@@ -761,9 +764,9 @@ int librdf_storage_get_feature_mro_bool(librdf_storage *storage, const unsigned 
                 const char *v = (char *)librdf_node_get_literal_value_as_counted_string(node, &len);
                 if( v ) {
                     // librdf_log(get_world(storage), 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "librdf_storage_get_feature_mro_bool return '%s'", v);
-                    if( 0 == strcmp("true", v) || 0 == strcmp("1", v) )
+                    if( 0 == strncmp("true", v, len) || 0 == strncmp("1", v, len) )
                         ret = true;
-                    else if( 0 == strcmp("false", v) || 0 == strcmp("0", v) )
+                    else if( 0 == strncmp("false", v, len) || 0 == strncmp("0", v, len) )
                         ret = false;
                     else
                         err = 4;
@@ -786,20 +789,21 @@ int librdf_storage_get_feature_mro_int(librdf_storage *storage, const unsigned c
 {
     assert(storage && "storage must be set.");
     assert(feature && "feature must be set.");
-    int err = 0;
+    int err = RET_OK;
     librdf_world *world = librdf_storage_get_world(storage);
     assert(world && "feature must be set.");
     librdf_uri *uri_f = librdf_new_uri(world, feature);
-    long ret = 0;
+    long ret = RET_OK;
     if( uri_f ) {
         librdf_node *node = librdf_storage_get_feature(storage, uri_f);
         if( node ) {
             if( LIBRDF_NODE_TYPE_LITERAL == node_type(node) ) {
                 size_t len = 0;
-                const char *v = (char *)librdf_node_get_literal_value_as_counted_string(node, &len);
-                if( v ) {
+                const char *str = (char *)librdf_node_get_literal_value_as_counted_string(node, &len);
+                if( str ) {
+                    assert(strlen(str) == len && "TODO: NUL terminate or limit length!");
                     char *end = NULL;
-                    ret = strtol(v, &end, 10);
+                    ret = strtol(str, &end, 10);
                     if( '\0' != *end )
                         err = 4;
                 } else
