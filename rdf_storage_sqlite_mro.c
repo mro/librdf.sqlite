@@ -694,8 +694,7 @@ static librdf_statement *find_statement(librdf_storage *storage, librdf_node *co
 #pragma mark Public Interface
 
 
-/** Convenience */
-void librdf_storage_set_feature_mro_bool(librdf_storage *storage, const unsigned char *feature, const bool value)
+int librdf_storage_set_feature_mro_bool(librdf_storage *storage, const unsigned char *feature, const bool value)
 {
     assert(storage && "storage must be set.");
     assert(feature && "feature must be set.");
@@ -710,16 +709,17 @@ void librdf_storage_set_feature_mro_bool(librdf_storage *storage, const unsigned
     // librdf_log(get_world(storage), 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "librdf_storage_set_feature_mro_bool sets '%s'", v);
     librdf_node *n = librdf_new_node_from_typed_literal(world, v, NULL, uri_xsd_boolean);
 
-    librdf_storage_set_feature(storage, uri_f, n);
+    const int ret = librdf_storage_set_feature(storage, uri_f, n);
 
     librdf_free_node(n);
     librdf_free_uri(uri_f);
     librdf_free_uri(uri_xsd_boolean);
+
+    return ret;
 }
 
 
-/** Convenience */
-void librdf_storage_set_feature_mro_int(librdf_storage *storage, const unsigned char *feature, const int value)
+int librdf_storage_set_feature_mro_int(librdf_storage *storage, const unsigned char *feature, const int value)
 {
     assert(storage && "storage must be set.");
     assert(feature && "feature must be set.");
@@ -734,15 +734,16 @@ void librdf_storage_set_feature_mro_int(librdf_storage *storage, const unsigned 
     snprintf(v, sizeof(v), "%d", value);
     librdf_node *n = librdf_new_node_from_typed_literal(world, (str_lit_val_t)v, NULL, uri_xsd_integer);
 
-    librdf_storage_set_feature(storage, uri_f, n);
+    const int ret = librdf_storage_set_feature(storage, uri_f, n);
 
     librdf_free_node(n);
     librdf_free_uri(uri_f);
     librdf_free_uri(uri_xsd_integer);
+
+    return ret;
 }
 
 
-/** Convenience */
 int librdf_storage_get_feature_mro_bool(librdf_storage *storage, const unsigned char *feature, bool *value)
 {
     assert(storage && "storage must be set.");
@@ -770,7 +771,7 @@ int librdf_storage_get_feature_mro_bool(librdf_storage *storage, const unsigned 
                     err = 3;
             } else
                 err = 2;
-            // librdf_free_node(n);
+            librdf_free_node(node);
         } else
             err = 1;
         librdf_free_uri(uri_f);
@@ -781,7 +782,6 @@ int librdf_storage_get_feature_mro_bool(librdf_storage *storage, const unsigned 
 }
 
 
-/** Convenience */
 int librdf_storage_get_feature_mro_int(librdf_storage *storage, const unsigned char *feature, int *value)
 {
     assert(storage && "storage must be set.");
@@ -806,7 +806,7 @@ int librdf_storage_get_feature_mro_int(librdf_storage *storage, const unsigned c
                     err = 3;
             } else
                 err = 2;
-            // librdf_free_node(n);
+            librdf_free_node(node);
         } else
             err = 1;
         librdf_free_uri(uri_f);
@@ -1271,7 +1271,6 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
     if( !feat )
         return -1;
     const char *val = (char *)librdf_node_get_literal_value(value);
-
     // librdf_log(get_world(storage), 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "pub_set_feature('%s', '%s')", feat, val);
 
     instance_t *db_ctx = get_instance(storage);
@@ -1279,8 +1278,9 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
         if( 0 == strcmp("0", val) ) {
             db_ctx->sql_cache_mask = 0;
         } else {
-            const int i = atoi(val);
-            if( 0 >= i ) {
+            char *end = NULL;
+            const long i = strtol(val, &end, 10);
+            if( NULL == end || '\0' != *end ) {
                 librdf_log(NULL, 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "invalid value: <%s> \"%s\"^^xsd:unsignedShort", feat, val);
                 return 3;
             }
@@ -1622,7 +1622,6 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
         librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Execute SQL statement #%d", idx);
         printExplainQueryPlan(stmt);
     }
-
     librdf_world *w = get_world(storage);
     // create iterator
     iterator_t *iter = LIBRDF_CALLOC(iterator_t *, sizeof(iterator_t), 1);

@@ -39,7 +39,7 @@ static char *test_bool_defaults()
 {
     librdf_world *world = librdf_new_world();
     MUAssert(world, "Failed to create world");
-    librdf_world_open(world);
+    // librdf_world_open(world);
     librdf_init_storage_sqlite_mro(world);
     {
         librdf_storage *storage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-feature.sqlite",
@@ -60,21 +60,20 @@ static char *test_bool_defaults()
     return NULL;
 }
 
-
 static char *test_bool_rw_ok()
 {
     librdf_world *world = librdf_new_world();
     MUAssert(world, "Failed to create world");
-    librdf_world_open(world);
+    // librdf_world_open(world);
     librdf_init_storage_sqlite_mro(world);
     {
         librdf_storage *storage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-feature.sqlite",
                                                      "new='on', contexts='no', synchronous='off'");
         MUAssert(storage, "Failed to create storage");
         {
-            librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, true);
+            MUAssert(0 == librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, true), "hu");
             bool value = false;
-            librdf_storage_get_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, &value);
+            MUAssert(0 == librdf_storage_get_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, &value), "hu");
             MUAssert(true == value, "wrong value");
         }
         librdf_free_storage(storage);
@@ -83,19 +82,18 @@ static char *test_bool_rw_ok()
     return NULL;
 }
 
-
 static char *test_bool_rw_fail()
 {
     librdf_world *world = librdf_new_world();
     MUAssert(world, "Failed to create world");
-    librdf_world_open(world);
+    // librdf_world_open(world);
     librdf_init_storage_sqlite_mro(world);
     {
         librdf_storage *storage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-feature.sqlite",
                                                      "new='on', contexts='no', synchronous='off'");
         MUAssert(storage, "Failed to create storage");
         {
-            librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK, true);
+            MUAssert(3 == librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK, true), "hu");
             bool value = false;
             MUAssert(4 == librdf_storage_get_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK, &value), "not set");
             MUAssert(false == value, "wrong value");
@@ -106,12 +104,11 @@ static char *test_bool_rw_fail()
     return NULL;
 }
 
-
 static char *test_int_defaults()
 {
     librdf_world *world = librdf_new_world();
     MUAssert(world, "Failed to create world");
-    librdf_world_open(world);
+    // librdf_world_open(world);
     librdf_init_storage_sqlite_mro(world);
     {
         librdf_storage *storage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-feature.sqlite",
@@ -130,19 +127,18 @@ static char *test_int_defaults()
     return NULL;
 }
 
-
 static char *test_int_rw_ok()
 {
     librdf_world *world = librdf_new_world();
     MUAssert(world, "Failed to create world");
-    librdf_world_open(world);
+    // librdf_world_open(world);
     librdf_init_storage_sqlite_mro(world);
     {
         librdf_storage *storage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-feature.sqlite",
                                                      "new='on', contexts='no', synchronous='off'");
         MUAssert(storage, "Failed to create storage");
         {
-            librdf_storage_set_feature_mro_int(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK, 0xFFFF);
+            MUAssert(0 == librdf_storage_set_feature_mro_int(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK, 0xFFFF), "hu");
             int value = -1;
             MUAssert(0 == librdf_storage_get_feature_mro_int(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK, &value), "not set");
             MUAssert(511 == value, "wrong value");
@@ -153,19 +149,18 @@ static char *test_int_rw_ok()
     return NULL;
 }
 
-
 static char *test_int_rw_fail()
 {
     librdf_world *world = librdf_new_world();
     MUAssert(world, "Failed to create world");
-    librdf_world_open(world);
+    // librdf_world_open(world);
     librdf_init_storage_sqlite_mro(world);
     {
         librdf_storage *storage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-feature.sqlite",
                                                      "new='on', contexts='no', synchronous='off'");
         MUAssert(storage, "Failed to create storage");
         {
-            librdf_storage_set_feature_mro_int(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, true);
+            MUAssert(0 == librdf_storage_set_feature_mro_int(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, true), "hu");
             int value = -1;
             MUAssert(4 == librdf_storage_get_feature_mro_int(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, &value), "not set");
             MUAssert(false == value, "wrong value");

@@ -79,8 +79,6 @@ run_test() {
   fi
 }
 
-set -x
-
 run_test test-feature.c
 run_test test-size.c
 run_test test-example1.c
