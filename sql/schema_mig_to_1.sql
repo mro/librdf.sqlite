@@ -94,76 +94,7 @@ CREATE INDEX triple_relations_index_o_blank_id ON triple_relations(o_blank_id); 
 CREATE INDEX triple_relations_index_o_lit_id   ON triple_relations(o_lit_id); -- WHERE o_lit_id IS NOT NULL;
 CREATE INDEX o_literals_index_datatype_id      ON o_literals(datatype_id); -- WHERE datatype_id IS NOT NULL;
 
-CREATE VIEW triples AS
-SELECT
-  -- all *_id (hashes):
-  triple_relations.id AS id
-  ,s_uri_id
-  ,s_blank_id
-  ,p_uri_id
-  ,o_uri_id
-  ,o_blank_id
-  ,o_lit_id
-  ,o_literals.datatype_id AS o_datatype_id
-  ,c_uri_id
-  -- all joined values:
-  ,s_uris.uri      AS s_uri
-  ,s_blanks.blank  AS s_blank
-  ,p_uris.uri      AS p_uri
-  ,o_uris.uri      AS o_uri
-  ,o_blanks.blank  AS o_blank
-  ,o_literals.text AS o_text
-  ,o_literals.language AS o_language
-  ,o_lit_uris.uri  AS o_datatype
-  ,c_uris.uri      AS c_uri
-FROM triple_relations
-LEFT OUTER JOIN so_uris    AS s_uris     ON triple_relations.s_uri_id   = s_uris.id
-LEFT OUTER JOIN so_blanks  AS s_blanks   ON triple_relations.s_blank_id = s_blanks.id
-INNER      JOIN p_uris     AS p_uris     ON triple_relations.p_uri_id   = p_uris.id
-LEFT OUTER JOIN so_uris    AS o_uris     ON triple_relations.o_uri_id   = o_uris.id
-LEFT OUTER JOIN so_blanks  AS o_blanks   ON triple_relations.o_blank_id = o_blanks.id
-LEFT OUTER JOIN o_literals AS o_literals ON triple_relations.o_lit_id   = o_literals.id
-LEFT OUTER JOIN t_uris     AS o_lit_uris ON o_literals.datatype_id      = o_lit_uris.id
-LEFT OUTER JOIN c_uris     AS c_uris     ON triple_relations.c_uri_id   = c_uris.id
-;
-
-CREATE TRIGGER triples_insert INSTEAD OF INSERT ON triples
-FOR EACH ROW BEGIN
-  -- subject uri/blank
-  INSERT OR IGNORE INTO so_uris   (id,uri)   VALUES (NEW.s_uri_id,      NEW.s_uri);
-  INSERT OR IGNORE INTO so_blanks (id,blank) VALUES (NEW.s_blank_id,    NEW.s_blank);
-  -- predicate uri
-  INSERT OR IGNORE INTO p_uris    (id,uri)   VALUES (NEW.p_uri_id,      NEW.p_uri);
-  -- object uri/blank
-  INSERT OR IGNORE INTO so_uris   (id,uri)   VALUES (NEW.o_uri_id,      NEW.o_uri);
-  INSERT OR IGNORE INTO so_blanks (id,blank) VALUES (NEW.o_blank_id,    NEW.o_blank);
-  -- object literal
-  INSERT OR IGNORE INTO t_uris    (id,uri)   VALUES (NEW.o_datatype_id, NEW.o_datatype);
-  INSERT OR IGNORE INTO o_literals(id,datatype_id,language,text) VALUES (NEW.o_lit_id, NEW.o_datatype_id, NEW.o_language, NEW.o_text);
-  -- context uri
-  INSERT OR IGNORE INTO c_uris    (id,uri)   VALUES (NEW.c_uri_id,      NEW.c_uri);
-  -- triple
-  INSERT INTO triple_relations(id, s_uri_id, s_blank_id, p_uri_id, o_uri_id, o_blank_id, o_lit_id, c_uri_id)
-  VALUES (NEW.id, NEW.s_uri_id, NEW.s_blank_id, NEW.p_uri_id, NEW.o_uri_id, NEW.o_blank_id, NEW.o_lit_id, NEW.c_uri_id);
-END;
-
-CREATE TRIGGER triples_delete INSTEAD OF DELETE ON triples
-FOR EACH ROW BEGIN
-  -- triple
-  DELETE FROM triple_relations WHERE id = OLD.id;
-  -- subject uri/blank
-  DELETE FROM so_uris    WHERE (OLD.s_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_uri_id    = OLD.s_uri_id))      AND (id = OLD.s_uri_id);
-  DELETE FROM so_blanks  WHERE (OLD.s_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE s_blank_id  = OLD.s_blank_id))    AND (id = OLD.s_blank_id);
-  -- predicate uri
-  DELETE FROM p_uris     WHERE (OLD.p_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE p_uri_id    = OLD.p_uri_id))      AND (id = OLD.p_uri_id);
-  -- object uri/blank
-  DELETE FROM so_uris    WHERE (OLD.o_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_uri_id    = OLD.o_uri_id))      AND (id = OLD.o_uri_id);
-  DELETE FROM so_blanks  WHERE (OLD.o_blank_id    IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_blank_id  = OLD.o_blank_id))    AND (id = OLD.o_blank_id);
-  -- object literal
-  DELETE FROM o_literals WHERE (OLD.o_lit_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE o_lit_id    = OLD.o_lit_id))      AND (id = OLD.o_lit_id);
-  DELETE FROM t_uris     WHERE (OLD.o_datatype_id IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM o_literals       WHERE datatype_id = OLD.o_datatype_id)) AND (id = OLD.o_datatype_id);
-  -- context uri
-  DELETE FROM c_uris     WHERE (OLD.c_uri_id      IS NOT NULL) AND (0 == (SELECT COUNT(id) FROM triple_relations WHERE c_uri_id    = OLD.c_uri_id))      AND (id = OLD.c_uri_id);
-END;
+-- continue DB schema setup in next migration to avoid
+-- : warning: string length ‘7405’ is greater than the length ‘4095’ ISO C99 compilers are required to support [-Woverlength-strings]
 
 PRAGMA user_version=1;

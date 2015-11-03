@@ -59,8 +59,8 @@ run_test() {
   echo -n "Running $test_name "
 
   rm "$TMP"/* "$BUILD"/*
-  $CC -pedantic -g3 -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/rdf_storage_sqlite_mro.o" "../rdf_storage_sqlite_mro.c" && {
-    $CC -pedantic -g3 -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/$test_name".o "$test_src" && {
+  $CC -Wall -Wno-unknown-pragmas -Werror -g3 -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/rdf_storage_sqlite_mro.o" "../rdf_storage_sqlite_mro.c" && {
+    $CC -Wall -Wno-unknown-pragmas -Werror -g3 -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/$test_name".o "$test_src" && {
       # http://ubuntuforums.org/showthread.php?t=1936253&p=11742200#post11742200
       $CC -g3 -O0 -o "$BUILD/a.out" "$BUILD/rdf_storage_sqlite_mro.o" "$BUILD/$test_name".o -lrdf -lraptor2 -lsqlite3 && {
         # valgrind --leak-check=full --show-reachable=yes \
