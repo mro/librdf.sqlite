@@ -806,6 +806,7 @@ static int pub_open(librdf_storage *storage, librdf_model *model)
         unlink(db_ctx->name);
 
     // open DB
+    assert( (NULL == db_ctx->db) && "db handle mustn't be set by now" );
     db_ctx->db = NULL;
     {
         const sqlite_rc_t rc = sqlite3_open(db_ctx->name, &db_ctx->db);
@@ -1133,7 +1134,6 @@ static int pub_set_feature(librdf_storage *storage, librdf_uri *feature, librdf_
     if( !feat )
         return -1;
     instance_t *db_ctx = get_instance(storage);
-
     if( 0 == strcmp(LIBRDF_STORAGE_SQLITE_MRO_ "feature/sql/cache/mask", (const char *)feat) ) {
         const str_lit_val_t val = (const str_lit_val_t)librdf_node_get_literal_value(value);
         if( 0 == strcmp("0", (const char *)val) ) {
@@ -1359,7 +1359,7 @@ static int pub_size(librdf_storage *storage)
     instance_t *db_ctx = get_instance(storage);
     sqlite3_stmt *stmt = prep_stmt(db_ctx->db, &(db_ctx->stmt_size), "SELECT COUNT(id) FROM triple_relations");
     const sqlite_rc_t rc = sqlite3_step(stmt);
-    return SQLITE_ROW == rc ? sqlite3_column_int(stmt, 0) : 0;
+    return SQLITE_ROW == rc ? sqlite3_column_int(stmt, 0) : -1;
 }
 
 
