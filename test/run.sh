@@ -37,13 +37,12 @@ run_test() {
   echo -n "Running $test_name "
 
   rm "$TMP"/* "$BUILD"/*
-  $CC -pedantic -O3 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/rdf_storage_sqlite_mro.o" "../rdf_storage_sqlite_mro.c" && {
-    $CC -pedantic -O3 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/$test_name".o "$test_src" && {
+  $CC -pedantic -g3 -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/rdf_storage_sqlite_mro.o" "../rdf_storage_sqlite_mro.c" && {
+    $CC -pedantic -g3 -O0 -std=c99 -D DEBUG=1 -I "/usr/include/raptor2" -I "/usr/include/rasqal" -c -o "$BUILD/$test_name".o "$test_src" && {
       # http://ubuntuforums.org/showthread.php?t=1936253&p=11742200#post11742200
-      $CC -o "$BUILD/a.out" "$BUILD/rdf_storage_sqlite_mro.o" "$BUILD/$test_name".o -lrdf -lraptor2 -lsqlite3 && {
+      $CC -g3 -O0 -o "$BUILD/a.out" "$BUILD/rdf_storage_sqlite_mro.o" "$BUILD/$test_name".o -lrdf -lraptor2 -lsqlite3 && {
         # valgrind --leak-check=full --show-reachable=yes \
         "$BUILD/a.out"
-        # "file://$(pwd)/$test_base.ttl" "http://purl.mro.name/rdf/sqlite/" 2> /dev/null
       }
     }
   }
@@ -60,7 +59,7 @@ run_test() {
 
 set -x
 
-# run_test test-loader.c
+run_test test-size.c
 run_test test-example1.c
 
 exit $status_code
