@@ -85,7 +85,7 @@ static char *_main(int argc, char *argv[])
         librdf_free_parser(parser);
 
         const double dt = 1.0 * (clock() - t_start) / CLOCKS_PER_SEC;
-        const int triple_count = librdf_model_size(model);
+        const int triple_count = 1; // librdf_model_size(model);
         fprintf(stderr, "Parsing %d triples took %.6f s\n", triple_count, dt);
     }
 
