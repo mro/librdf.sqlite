@@ -28,58 +28,57 @@
 # http://stackoverflow.com/questions/2042595/doxygen-and-objective-c-categories
 
 if [ ! -e "$DOXYGEN" ] ; then
-	DOXYGEN=/Applications/Doxygen.app/Contents/Resources/doxygen
+  DOXYGEN=/Applications/Doxygen.app/Contents/Resources/doxygen
 fi
 if [ ! -e "$DOXYGEN" ] ; then
-	# use most recent
-	DOXYGEN=$(ls -t /Applications/Doxygen*/Contents/Resources/doxygen | head -n 1)
+  # use most recent
+  DOXYGEN=$(ls -t /Applications/Doxygen*/Contents/Resources/doxygen | head -n 1)
 fi
 if [ ! -e "$DOXYGEN" ] ; then
-	echo "I cannot find doxygen. Please install doxygen from" >&2
-#	echo "\n    http://www.stack.nl/~dimitri/doxygen/download.html#latestsrc" >&2
-	echo "\n    ftp://ftp.stack.nl/pub/users/dimitri/Doxygen-1.5.9.dmg" >&2
-	echo "\ninto 'Applications', or set" >&2
-	echo "\n    export DOXYGEN=..." >&2
-	echo "\nto point to the location you installed it to." >&2
-	exit 1
+  echo "I cannot find doxygen. Please install doxygen from" >&2
+# echo "\n    http://www.stack.nl/~dimitri/doxygen/download.html#latestsrc" >&2
+  echo "\n    ftp://ftp.stack.nl/pub/users/dimitri/Doxygen-1.5.9.dmg" >&2
+  echo "\ninto 'Applications', or set" >&2
+  echo "\n    export DOXYGEN=..." >&2
+  echo "\nto point to the location you installed it to." >&2
+  exit 1
 fi
 echo "Found doxygen $($DOXYGEN --version) at $DOXYGEN" >&2
 
 if [ ! -e "$DOT_PATH"/dot ] ; then
-	# use packaged with doxygen
-	DOT_PATH=$(dirname "$DOXYGEN")
+  # use packaged with doxygen
+  DOT_PATH=$(dirname "$DOXYGEN")
 fi
 if [ ! -e "$DOT_PATH"/dot ] ; then
-	# search in path
-	DOT_PATH=$(which dot | head -n 1)
-	DOT_PATH=$(dirname "$DOT_PATH")
+  # search in path
+  DOT_PATH=$(which dot | head -n 1)
+  DOT_PATH=$(dirname "$DOT_PATH")
 fi
 if [ ! -e "$DOT_PATH"/dot ] ; then
-	# search in /usr/local
-	DOT_PATH=$(find /usr/local -maxdepth 4 -type f -name dot | head -n 1)
-	DOT_PATH=$(dirname "$DOT_PATH")
+  # search in /usr/local
+  DOT_PATH=$(find /usr/local -maxdepth 4 -type f -name dot | head -n 1)
+  DOT_PATH=$(dirname "$DOT_PATH")
 fi
 if [ ! -e "$DOT_PATH"/dot ] ; then
-	echo "I cannot find graphviz. I could run without, but that's only half the fun. So please install graphviz from" >&2
-	echo "\n    http://www.ryandesign.com/graphviz/" >&2
-	echo "\nsomewhere in \$PATH or under /usr/local, or set" >&2
-	echo "\n    export DOT_PATH=..." >&2
-	echo "\nto point to the directory you installed dot into." >&2
-	exit 2
+  echo "I cannot find graphviz. I could run without, but that's only half the fun. So please install graphviz from" >&2
+  echo "\n    http://www.ryandesign.com/graphviz/" >&2
+  echo "\nsomewhere in \$PATH or under /usr/local, or set" >&2
+  echo "\n    export DOT_PATH=..." >&2
+  echo "\nto point to the directory you installed dot into." >&2
+  exit 2
 fi
 echo "Found $("$DOT_PATH"/dot -V 2>&1) at $DOT_PATH/dot" >&2
 
 echo "Found mscgen $(mscgen -l | head -2 | tail -1) at $(which mscgen)" >&2
 
 PROJECT_BUNDLE_ID="name.mro.rdf.sqlite"
-PROJECT_NAME="LibRdf SQLite Storage"
-PROJECT_VERSION="1.0"
+PROJECT_NAME="Redland RDF SQLite Storage"
+PROJECT_VERSION="0.5"
 PROJECT_SOURCE="."
 
-cd `dirname $0`/..
-if [[ "$PROJECT_NAME" == "" ]] ; then
-	tmp=`pwd`
-	PROJECT_NAME=`basename "$tmp"`
+cd "$(dirname "$0")/.."
+if [ "" = "$PROJECT_NAME" ] ; then
+  PROJECT_NAME="$(basename "$(pwd)")"
 fi
 
 # set up some paths
