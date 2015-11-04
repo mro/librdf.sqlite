@@ -1484,7 +1484,8 @@ static void pub_iter_finished(void *_ctx)
     if( ctx->statement )
         librdf_free_statement(ctx->statement);
     librdf_storage_remove_reference(ctx->storage);
-    transaction_rollback(ctx->storage, ctx->txn);
+    if( RET_OK == ctx->txn )
+        transaction_rollback(ctx->storage, ctx->txn);
     if( ctx->keep_stmt ) {
         sqlite3_reset(ctx->stmt);
         sqlite3_clear_bindings(ctx->stmt);
@@ -1541,7 +1542,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     assert(params <= ALL_PARAMS && "params bitmask overflow");
     const int idx = params; // might become more complex to save some memory in db_ctx->stmt_triple_finds - see https://github.com/mro/librdf.sqlite/issues/11#issuecomment-151959176
 
-    const sqlite_rc_t begin = transaction_start(storage);
+    const sqlite_rc_t begin = RET_ERROR; // transaction_start(storage);
     instance_t *db_ctx = get_instance(storage);
 
     assert(idx < ALL_PARAMS + 1 && "statement cache array overflow");
