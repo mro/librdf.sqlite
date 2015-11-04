@@ -10,9 +10,7 @@ TESTS_C   := $(wildcard test-*.c)
 TESTS_O   := $(patsubst %.c,$(BUILD)/%.o,$(TESTS_C))
 TESTS     := $(patsubst %.o,%,$(TESTS_O))
 
-test:			compile $(TESTS)
-
-compile:	$(BUILD)/rdf_storage_sqlite_mro.o $(TESTS_O)
+test:			$(TESTS)
 
 clean:
 	-rm $(BUILD)/* $(TMP)/*
