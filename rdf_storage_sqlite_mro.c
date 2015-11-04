@@ -382,7 +382,7 @@ static sqlite3_stmt *prep_stmt(sqlite3 *db, sqlite3_stmt **stmt_p, const char *z
     assert(stmt_p && "statement is NULL");
     assert(zSql && "SQL is NULL");
     if( *stmt_p ) {
-        assert(0 == strcmp(sqlite3_sql(*stmt_p), zSql) && "ouch");
+        assert(0 == strcmp(sqlite3_sql(*stmt_p), zSql) && "sql changed during compilation.");
         const sqlite_rc_t rc0 = sqlite3_reset(*stmt_p);
         assert(SQLITE_OK == rc0 && "couldn't reset SQL statement");
         const sqlite_rc_t rc1 = sqlite3_clear_bindings(*stmt_p);
@@ -405,7 +405,7 @@ static void finalize_stmt(sqlite3_stmt **pStmt)
         return;
     sqlite3_reset(*pStmt);
     const sqlite_rc_t rc = sqlite3_finalize(*pStmt);
-    assert(SQLITE_OK == rc && "ouch");
+    assert(SQLITE_OK == rc && "couldn't properly sqlite3_finalize");
     *pStmt = NULL;
 }
 
@@ -586,9 +586,9 @@ static sqlite_rc_t transaction_start(librdf_storage *storage)
     instance_t *db_ctx = get_instance(storage);
     if( db_ctx->in_transaction )
         return SQLITE_MISUSE;
-    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_start), "BEGIN IMMEDIATE TRANSACTION;") );
+    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_start), "BEGIN IMMEDIATE TRANSACTION") );
     db_ctx->in_transaction = SQLITE_DONE == rc;
-    assert(db_ctx->in_transaction != false && "ouch");
+    assert(false != db_ctx->in_transaction && "transaction was not properly started");
     return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
@@ -600,9 +600,9 @@ static sqlite_rc_t transaction_commit(librdf_storage *storage, const sqlite_rc_t
     instance_t *db_ctx = get_instance(storage);
     if( false == db_ctx->in_transaction )
         return SQLITE_MISUSE;
-    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_commit), "COMMIT  TRANSACTION;") );
+    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_commit), "COMMIT  TRANSACTION") );
     db_ctx->in_transaction = !(SQLITE_DONE == rc);
-    assert(false == db_ctx->in_transaction && "ouch");
+    assert(false == db_ctx->in_transaction && "transaction was not properly committed");
     return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
@@ -614,9 +614,9 @@ static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc
     instance_t *db_ctx = get_instance(storage);
     if( false == db_ctx->in_transaction )
         return SQLITE_MISUSE;
-    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_rollback), "ROLLBACK TRANSACTION;") );
+    const sqlite_rc_t rc = sqlite3_step( prep_stmt(db_ctx->db, &(db_ctx->stmt_txn_rollback), "ROLLBACK TRANSACTION") );
     db_ctx->in_transaction = !(SQLITE_DONE == rc);
-    assert(false == db_ctx->in_transaction && "ouch");
+    assert(false == db_ctx->in_transaction && "transaction was not properly rolled back");
     return SQLITE_DONE == rc ? SQLITE_OK : rc;
 }
 
