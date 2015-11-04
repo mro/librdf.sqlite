@@ -10,4 +10,6 @@ addons:
 compiler:
   - gcc
   - clang
-script: make -C test test
+script:
+  - apt-cache show librdf0 libraptor2-0 librasqal3 librdf-storage-sqlite | egrep "Version|Source"
+  - make -C test clean test
