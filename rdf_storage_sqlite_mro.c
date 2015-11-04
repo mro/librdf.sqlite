@@ -27,7 +27,7 @@
 
 #include "rdf_storage_sqlite_mro.h"
 
-#define NAMESPACE "http://purl.mro.name/rdf/sqlite/"
+#define NAMESPACE "http://purl.mro.name/librdf.sqlite/"
 const char *LIBRDF_STORAGE_SQLITE_MRO = NAMESPACE;
 
 const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK = (unsigned char *)NAMESPACE "feature/sql/cache/mask";
@@ -609,7 +609,7 @@ static sqlite_rc_t transaction_commit(librdf_storage *storage, const sqlite_rc_t
 
 static sqlite_rc_t transaction_rollback(librdf_storage *storage, const sqlite_rc_t begin)
 {
-    if( begin != SQLITE_OK )
+    if( SQLITE_OK != begin )
         return SQLITE_OK;
     instance_t *db_ctx = get_instance(storage);
     if( false == db_ctx->in_transaction )
@@ -1484,8 +1484,7 @@ static void pub_iter_finished(void *_ctx)
     if( ctx->statement )
         librdf_free_statement(ctx->statement);
     librdf_storage_remove_reference(ctx->storage);
-    if( RET_OK == ctx->txn )
-        transaction_rollback(ctx->storage, ctx->txn);
+    transaction_rollback(ctx->storage, ctx->txn);
     if( ctx->keep_stmt ) {
         sqlite3_reset(ctx->stmt);
         sqlite3_clear_bindings(ctx->stmt);
