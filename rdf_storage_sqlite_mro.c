@@ -251,7 +251,7 @@ static hash_t node_hash_literal(librdf_node *node, librdf_digest *digest)
         size_t len = 0;
         unsigned char *str = librdf_node_get_literal_value_as_counted_string(node, &len);
         assert(str && "literal without value");
-        assert(strlen((char*)str) == len && "TODO: NUL terminate or limit length!");
+        assert(strlen( (char *)str ) == len && "TODO: NUL terminate or limit length!");
         librdf_digest_update(digest, str, len);
     }
     librdf_uri *uri = librdf_node_get_literal_value_datatype_uri(node);
@@ -544,7 +544,7 @@ static sqlite_rc_t bind_stmt(instance_t *db_ctx, librdf_statement *statement, li
             if( SQLITE_OK != ( rc = bind_text( stmt, ":o_language", (unsigned char *)l, strlen(l) ) ) ) return rc;
         size_t len = 0;
         const unsigned char *str = librdf_node_get_literal_value_as_counted_string(o, &len);
-        assert(strlen((char*)str) == len && "TODO: NUL terminate or limit length!");
+        assert(strlen( (char *)str ) == len && "TODO: NUL terminate or limit length!");
         if( SQLITE_OK != ( rc = bind_text(stmt, ":o_text", str, len) ) ) return rc;
     }
 
@@ -727,8 +727,8 @@ int librdf_storage_set_feature_mro_int(librdf_storage *storage, const unsigned c
     assert(storage && "storage must be set.");
     assert(feature && "feature must be set.");
     librdf_world *world = librdf_storage_get_world(storage);
-
     assert(world && "world must be set.");
+
     librdf_uri *uri_xsd_integer = librdf_new_uri(world, (str_uri_t)LIBRDF_NAMESPACE_XSD "integer");
     assert(uri_xsd_integer && "uri_xsd_integer must be set.");
     librdf_uri *uri_f = librdf_new_uri(world, feature);
@@ -751,10 +751,11 @@ int librdf_storage_get_feature_mro_bool(librdf_storage *storage, const unsigned 
 {
     assert(storage && "storage must be set.");
     assert(feature && "feature must be set.");
-    int err = RET_OK;
     librdf_world *world = librdf_storage_get_world(storage);
-    assert(world && "feature must be set.");
+    assert(world && "world must be set.");
+
     librdf_uri *uri_f = librdf_new_uri(world, feature);
+    int err = RET_OK;
     bool ret = false;
     if( uri_f ) {
         librdf_node *node = librdf_storage_get_feature(storage, uri_f);
@@ -789,10 +790,11 @@ int librdf_storage_get_feature_mro_int(librdf_storage *storage, const unsigned c
 {
     assert(storage && "storage must be set.");
     assert(feature && "feature must be set.");
-    int err = RET_OK;
     librdf_world *world = librdf_storage_get_world(storage);
-    assert(world && "feature must be set.");
+    assert(world && "world must be set.");
+
     librdf_uri *uri_f = librdf_new_uri(world, feature);
+    int err = RET_OK;
     long ret = RET_OK;
     if( uri_f ) {
         librdf_node *node = librdf_storage_get_feature(storage, uri_f);

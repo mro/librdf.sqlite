@@ -58,6 +58,7 @@ static char *test_bool_defaults()
     return NULL;
 }
 
+
 static char *test_bool_rw_ok()
 {
     librdf_world *world = librdf_new_world();
@@ -80,6 +81,7 @@ static char *test_bool_rw_ok()
     return NULL;
 }
 
+
 static char *test_bool_rw_fail()
 {
     librdf_world *world = librdf_new_world();
@@ -101,6 +103,7 @@ static char *test_bool_rw_fail()
     librdf_free_world(world);
     return NULL;
 }
+
 
 static char *test_int_defaults()
 {
@@ -125,6 +128,7 @@ static char *test_int_defaults()
     return NULL;
 }
 
+
 static char *test_int_rw_ok()
 {
     librdf_world *world = librdf_new_world();
@@ -146,6 +150,7 @@ static char *test_int_rw_ok()
     librdf_free_world(world);
     return NULL;
 }
+
 
 static char *test_int_rw_fail()
 {

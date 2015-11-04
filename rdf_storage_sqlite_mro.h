@@ -28,29 +28,18 @@
 #ifndef Redland_rdf_storage_sqlite_mro_h
 #define Redland_rdf_storage_sqlite_mro_h
 
+#ifndef LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
+#define LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE 0
+#endif
+
+#if LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
+#include <stdbool.h>
+#endif
+
 #include <librdf.h>
 
-#ifndef LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
-#define LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE 0
-#endif
-
-#if LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
-#include <stdbool.h>
-#include <errno.h>
-#endif
-
-/** Factory name.
- */
+/** Storage Factory name. */
 extern const char *LIBRDF_STORAGE_SQLITE_MRO;
-
-#ifndef LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
-#define LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE 0
-#endif
-
-#if LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
-#include <stdbool.h>
-#include <errno.h>
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,52 +51,44 @@ extern "C" {
  *
  * #include "rdf_storage_sqlite_mro.h"
  * ....
- * librdf_world *world = ...;
- * ....
+ * librdf_world *world = librdf_new_world();
  * librdf_init_storage_sqlite_mro(world);  // register storage factory
  * ....
  * const char* options = "new='yes', contexts='no'";
- * librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options); *
+ * librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
  */
 void librdf_init_storage_sqlite_mro(librdf_world *);
 
+
 #if LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
 
-/** Typed convenience wrapper for
- * librdf_storage_set_feature(storage,uri,literal)
- */
-int librdf_storage_set_feature_mro_bool(librdf_storage *, const unsigned char *feature, const bool value);
+/** Typed convenience wrapper for librdf_storage_set_feature(storage,uri,literal) */
+int librdf_storage_set_feature_mro_bool(librdf_storage *, const unsigned char *feature, bool value);
 
-/** Typed convenience wrapper for
- * librdf_storage_set_feature(storage,uri,literal)
- */
-int librdf_storage_set_feature_mro_int(librdf_storage *, const unsigned char *feature, const int value);
+/** Typed convenience wrapper for librdf_storage_set_feature(storage,uri,literal) */
+int librdf_storage_set_feature_mro_int(librdf_storage *, const unsigned char *feature, int value);
 
-/** Typed convenience wrapper for
- * librdf_storage_get_feature(storage,uri)
- */
+/** Typed convenience wrapper for librdf_storage_get_feature(storage,uri) */
 int librdf_storage_get_feature_mro_bool(librdf_storage *, const unsigned char *feature, bool *value);
 
-/** Typed convenience wrapper for
- * librdf_storage_get_feature(storage,uri)
- */
+/** Typed convenience wrapper for librdf_storage_get_feature(storage,uri) */
 int librdf_storage_get_feature_mro_int(librdf_storage *, const unsigned char *feature, int *value);
+
 #endif
 
 #ifdef __cplusplus
 } // extern "C"
 #endif
 
-/** Which triple-find-queries should be cached. Bitmask, http://www.w3.org/2000/10/XMLSchema#unsignedShort. Clipped to 0x1FF.
-*/
+/** Which triple-find-queries should be cached. Bitmask, http://www.w3.org/2000/10/XMLSchema#unsignedShort.
+ *  Clipped to 0x1FF.
+ */
 extern const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQL_CACHE_MASK;
 
-/** Register sqlite3_profile or not. http://www.w3.org/2000/10/XMLSchema#boolean.
-*/
+/** Register sqlite3_profile or not. http://www.w3.org/2000/10/XMLSchema#boolean. */
 extern const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE;
 
-/** Print (some) sqlite3 'EXPLAIN QUERY PLAN' or not. http://www.w3.org/2000/10/XMLSchema#boolean.
-*/
+/** Print (some) sqlite3 'EXPLAIN QUERY PLAN' or not. http://www.w3.org/2000/10/XMLSchema#boolean. */
 extern const unsigned char *LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN;
 
 #endif
