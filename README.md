@@ -10,14 +10,15 @@ Inspired by the [official sqlite store](https://github.com/dajobe/librdf/blob/ma
 
 ## Usage
 
-    #include "rdf_storage_sqlite_mro.h"
-    ....
-    librdf_world *world = ...;
-    ....
-    librdf_init_storage_sqlite_mro(world);  // register storage factory
-    ....
-    const char* options = "new='yes', contexts='no'";
-    librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
+```c
+#include "rdf_storage_sqlite_mro.h"
+....
+librdf_world *world = librdf_new_world();
+librdf_init_storage_sqlite_mro(world);  // register storage factory
+....
+const char* options = "new='yes', contexts='no'";
+librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
+```
 
 See e.g. in (my) <https://github.com/mro/librdf.objc>.
 
