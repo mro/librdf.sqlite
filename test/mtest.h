@@ -36,16 +36,16 @@
 #include <time.h>
 
 #define MUTestRun(test) do { \
-        const char *marker = TOSTRING(test); \
-        printf("travis_fold:start:%s\n", marker); \
+        const char *test_name = TOSTRING(test); \
+        printf("travis_fold:start:%s\n", test_name); \
         const double CLOCKS_PER_NANO_SEC = CLOCKS_PER_SEC * 1e-9; \
         const long long unsigned int t_start = clock() / CLOCKS_PER_NANO_SEC; \
-        printf("travis_time:start:%s_time\n", marker); \
+        printf("travis_time:start:%s_time\n", test_name); \
         char *message = test(); tests_run++; \
-        printf("%s%s %s %s\n", message ? (ANSI_COLOR_F_RED "✗") : (ANSI_COLOR_F_GREEN "✓"), ANSI_COLOR_RESET, marker, message ? message : ""); \
+        printf("%s%s %s %s() %s\n", message ? (ANSI_COLOR_F_RED "✗") : (ANSI_COLOR_F_GREEN "✓"), ANSI_COLOR_RESET, __FILE__, test_name, message ? message : ""); \
         const long long unsigned int t_finish = clock() / CLOCKS_PER_NANO_SEC; \
-        printf("travis_time:end:%s_time:start=%llu,finish=%llu,duration=%llu\n", marker, t_start, t_finish, t_finish - t_start); \
-        printf("travis_fold:end:%s\n", marker); \
+        printf("travis_time:end:%s_time:start=%llu,finish=%llu,duration=%llu\n", test_name, t_start, t_finish, t_finish - t_start); \
+        printf("travis_fold:end:%s\n", test_name); \
         if( message ) return message; \
 } \
     while( 0 )
