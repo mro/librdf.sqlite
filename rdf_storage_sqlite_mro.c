@@ -1792,7 +1792,7 @@ static void register_factory(librdf_storage_factory *factory)
 }
 
 
-void librdf_init_storage_sqlite_mro(librdf_world *world)
+int librdf_init_storage_sqlite_mro(librdf_world *world)
 {
-    librdf_storage_register_factory(world, LIBRDF_STORAGE_SQLITE_MRO, "SQLite", &register_factory);
+    return librdf_storage_register_factory(world, LIBRDF_STORAGE_SQLITE_MRO, "SQLite", &register_factory);
 }
