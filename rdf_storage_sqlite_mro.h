@@ -57,7 +57,7 @@ extern "C" {
  * const char* options = "new='yes', contexts='no'";
  * librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
  */
-void librdf_init_storage_sqlite_mro(librdf_world *);
+int librdf_init_storage_sqlite_mro(librdf_world *);
 
 
 #if LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE
