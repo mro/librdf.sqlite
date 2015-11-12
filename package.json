@@ -1,0 +1,12 @@
+{
+  "name": "librdf.sqlite",
+  "version": "0.1",
+  "repo": "mro/librdf.sqlite",
+  "description": "improved SQLite RDF triple store for Redland librdf ",
+  "keywords": [ "rdf", "librdf", "sqlite", "redland" ],
+  "license": "https://github.com/mro/librdf.sqlite/blob/master/LICENSE",
+  "src": [
+    "rdf_storage_sqlite_mro.c",
+    "rdf_storage_sqlite_mro.h"
+  ]
+}
