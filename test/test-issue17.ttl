@@ -1,0 +1,17 @@
+@prefix dbpont: <http://dbpedia.org/ontology/>.
+@prefix dbpres: <http://dbpedia.org/resource/>.
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+
+dbpres:The_Art_of_Computer_Programming 
+    a dbpont:Book ;
+    dbpont:author dbpres:Donald_Knuth ;
+    foaf:name "The Art of Computer Programming" ;
+    dbpont:isbn "0-201-03801-3" ;
+    dbpont:numberOfPages "634"^^<http://www.w3.org/2001/XMLSchema#integer> ;
+    dbpont:mediaType dbpres:Hardcover .
+
+<http://dbpedia.org/resource/The_Republic_(Plato)>
+    a dbpont:Book ;
+    dbpont:author dbpres:Plato ;
+    foaf:name "Republic"@en ;
+    dbpont:language dbpres:Greek_language .
