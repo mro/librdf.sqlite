@@ -2,7 +2,7 @@
 # set compiler if unset from outside
 CC        ?= gcc
 
-CFLAGS    = -Wall -Wno-unknown-pragmas -Werror -g3 -O0 -std=c99 -D DEBUG=1 -I /usr/include/raptor2 -I /usr/include/rasqal
+CFLAGS    = -Wall -Wno-unknown-pragmas -Werror -g3 -O0 -std=c99 -D DEBUG=1 -I /usr/include -I /usr/include/raptor2 -I /usr/include/rasqal
 BUILD     = build
 TMP       = tmp
 

@@ -895,7 +895,7 @@ static void pub_terminate(librdf_storage *storage)
     if( db_ctx->digest )
         librdf_free_digest(db_ctx->digest);
 
-    assert(db_ctx->stmt_triple_finds && "db_ctx->stmt_triple_finds is NULL");
+    assert(NULL != db_ctx->stmt_triple_finds && "db_ctx->stmt_triple_finds is NULL");
     for( int i = ALL_PARAMS + 1 - 1; i >= 0; i-- )
         assert(NULL == db_ctx->stmt_triple_finds[i] && "un-finalized sqlite3_stmt in db_ctx->stmt_triple_finds");
 
