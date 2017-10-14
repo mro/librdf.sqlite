@@ -1,15 +1,18 @@
+---
 # http://docs.travis-ci.com/user/languages/c/
 language: c
 sudo: false
+branches:
+- master
+- develop
 addons:
   apt:
     packages:
     - librdf0-dev
     - librdf-storage-sqlite
-    # - raptor2-utils
 compiler:
-  - gcc
-  - clang
+- gcc
+- clang
 script:
-  - apt-cache show librdf0 libraptor2-0 librasqal3 librdf-storage-sqlite | egrep "Version|Source"
-  - make -C test clean test
+- apt-cache show librdf0 libraptor2-0 librasqal3 librdf-storage-sqlite | egrep "Version|Source"
+- make -C test clean test
