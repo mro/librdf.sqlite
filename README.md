@@ -20,7 +20,7 @@ const char* options = "new='yes', contexts='no'";
 librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
 ```
 
-See e.g. in (my) <https://git.mro.name/mro/librdf.objc>.
+See e.g. in (my) <http://purl.mro.name/ios/librdf.objc>.
 
 ## License
 
