@@ -20,12 +20,12 @@ const char* options = "new='yes', contexts='no'";
 librdf_storage *newStorage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, file_path, options);
 ```
 
-See e.g. in (my) <https://github.com/mro/librdf.objc>.
+See e.g. in (my) <https://git.mro.name/mro/librdf.objc>.
 
 ## License
 
 - `test/minunit.h`, Copyright (C) 2002 [John Brewer](http://jera.com), NO WARRANTY,
-- *all others*, Copyright (C) 2014-2015 [Marcus Rohrmoser mobile Software](http://mro.name/me), [Human Rights License](LICENSE)
+- *all others*, Copyright (C) 2014-2015 [Marcus Rohrmoser mobile Software](http://mro.name/~me), [Human Rights License](LICENSE)
 
 ## Design Goals
 
