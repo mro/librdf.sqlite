@@ -3,7 +3,7 @@
 //
 // Created by Marcus Rohrmoser on 19.05.14.
 //
-// Copyright (c) 2014-2015, Marcus Rohrmoser mobile Software, http://mro.name/me
+// Copyright (c) 2014-2018, Marcus Rohrmoser mobile Software, http://mro.name/~me
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are permitted
@@ -127,9 +127,6 @@ typedef struct
     sqlite3_stmt *stmt_triple_delete;
 
     sqlite3_stmt *stmt_size;
-
-    // TODO: remove
-    sqlite3_stmt *stmt_triple_finds[ALL_PARAMS + 1]; // sparse triple find queries
 }
 instance_t;
 
@@ -896,10 +893,6 @@ static void pub_terminate(librdf_storage *storage)
     if( db_ctx->digest )
         librdf_free_digest(db_ctx->digest);
 
-    assert(NULL != db_ctx->stmt_triple_finds && "db_ctx->stmt_triple_finds is NULL");
-    for( int i = ALL_PARAMS + 1 - 1; i >= 0; i-- )
-        assert(NULL == db_ctx->stmt_triple_finds[i] && "un-finalized sqlite3_stmt in db_ctx->stmt_triple_finds");
-
     LIBRDF_FREE(instance_t *, db_ctx);
 }
 
@@ -918,12 +911,6 @@ static int pub_close(librdf_storage *storage)
     finalize_stmt( &(db_ctx->stmt_triple_delete) );
 
     finalize_stmt( &(db_ctx->stmt_size) );
-
-    for( int i = ALL_PARAMS; i >= 0; i-- ) {
-        // if( NULL != db_ctx->stmt_triple_finds[i] )
-        // librdf_log(get_world(storage), 0, LIBRDF_LOG_DEBUG, LIBRDF_FROM_STORAGE, NULL, "finalize_stmt %d %s", i, sqlite3_sql(db_ctx->stmt_triple_finds[i]));
-        finalize_stmt( &(db_ctx->stmt_triple_finds[i]) );
-    }
 
     const sqlite_rc_t rc = sqlite3_close(db_ctx->db);
     if( SQLITE_OK == rc ) {
@@ -1363,7 +1350,6 @@ typedef struct
     sqlite_rc_t txn;
     sqlite_rc_t rc;
     bool dirty;
-    bool keep_stmt;
 }
 iterator_t;
 
@@ -1486,11 +1472,7 @@ static void pub_iter_finished(void *_ctx)
         librdf_free_statement(ctx->statement);
     librdf_storage_remove_reference(ctx->storage);
     transaction_rollback(ctx->storage, ctx->txn);
-    if( ctx->keep_stmt ) {
-        sqlite3_reset(ctx->stmt);
-        sqlite3_clear_bindings(ctx->stmt);
-    } else
-        sqlite3_finalize(ctx->stmt);
+    sqlite3_finalize(ctx->stmt);
 
     LIBRDF_FREE(iterator_t *, ctx);
 }
@@ -1540,15 +1522,12 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
                        | (context_node ? P_C_URI : 0)
     ;
     assert(params <= ALL_PARAMS && "params bitmask overflow");
-    const int idx = params; // might become more complex to save some memory in db_ctx->stmt_triple_finds - see https://github.com/mro/librdf.sqlite/issues/11#issuecomment-151959176
 
     const sqlite_rc_t begin = RET_ERROR; // transaction_start(storage);
     instance_t *db_ctx = get_instance(storage);
 
-    assert(idx < ALL_PARAMS + 1 && "statement cache array overflow");
-
-    sqlite3_stmt *stmt = db_ctx->stmt_triple_finds[idx];
-    if( NULL == stmt ) {
+    sqlite3_stmt *stmt = NULL;
+    {
         const char find_triples_sql[] = // generated via tools/sql2c.sh find_triples.sql
                                         " -- result columns must match as in enum idx_triple_column_t" "\n" \
                                         "SELECT" "\n" \
@@ -1612,11 +1591,8 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
             strncpy(strstr(sql, "AND c_uri_id"), "-- ", 3);
         assert('-' != sql[0] && "'AND c_uri_id' not found in find_triples.sql");
 
-        librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Created SQL statement #%d", idx);
+        librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Created SQL statement #%d", params);
         prep_stmt(db_ctx->db, &stmt, sql);
-        if( false && params == (db_ctx->sql_cache_mask & params) )
-            // decide whether to keep the sqlite3_statement for reuse or not.
-            db_ctx->stmt_triple_finds[idx] = stmt;
     } // else if( false ) {
       // toggle via "profile" feature?
       // librdf_log( librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "%s", librdf_statement_to_string(statement) );
@@ -1626,7 +1602,7 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     assert(SQLITE_OK == rc && "find_statements: failed to bind SQL parameters");
 
     if( db_ctx->do_explain_query_plan ) {
-        librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Execute SQL statement #%d", idx);
+        librdf_log(librdf_storage_get_world(storage), 0, LIBRDF_LOG_INFO, LIBRDF_FROM_STORAGE, NULL, "Execute SQL statement #%d", params);
         printExplainQueryPlan(stmt);
     }
     librdf_world *w = get_world(storage);
@@ -1640,7 +1616,6 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
     iter->rc = sqlite3_step(stmt);
     iter->statement = librdf_new_statement(w);
     iter->dirty = true;
-    iter->keep_stmt = (db_ctx->stmt_triple_finds[idx] == stmt); // keep sqlite3_statement only if cached.
 
     librdf_storage_add_reference(iter->storage);
     librdf_stream *stream = librdf_new_stream(w, iter, &pub_iter_end_of_stream, &pub_iter_next_statement, &pub_iter_get_statement, &pub_iter_finished);
