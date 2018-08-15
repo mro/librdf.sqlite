@@ -25,5 +25,5 @@ $(BUILD)/test-%.o:	test-%.c
 
 # link + run a single test
 $(BUILD)/test-%:	$(BUILD)/test-%.o $(BUILD)/rdf_storage_sqlite_mro.o
-	$(CC) -o $@ $? -lrdf -lsqlite3
+	$(CC) -g3 -o $@ $? -lrdf -lsqlite3
 	$@
