@@ -1566,8 +1566,9 @@ static librdf_stream *pub_context_find_statements(librdf_storage *storage, librd
         ;
 
         // create a SQL working copy (on stack) to fiddle with.
-        char sql[sizeof(find_triples_sql)];
-        strcpy(sql, find_triples_sql);
+        const size_t siz = sizeof(find_triples_sql);
+        char sql[siz];
+        strncpy(sql, find_triples_sql, siz);
         // sculpt the SQL instead building it: comment out the NULL parameter terms
         if( 0 == (P_S_URI & params) )
             strncpy(strstr(sql, "AND s_uri_id"), "-- ", 3);
