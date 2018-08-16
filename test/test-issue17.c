@@ -67,13 +67,15 @@ int main(int argc, char **argv)
  */
 static char *test_sparql()
 {
-    const char query_string[] = ""
+    const unsigned char query_string[] = ""
                                 "SELECT ?author ?title\n"
                                 "WHERE {\n"
                                 "       ?book a <http://dbpedia.org/ontology/Book> .\n"
                                 "       ?book <http://xmlns.com/foaf/0.1/name> ?title .\n"
                                 "       ?book <http://dbpedia.org/ontology/author> ?author.\n" "}\n";
     librdf_world *world = librdf_new_world();
+    MUAssert(0 != sizeof(query_string), "uhu");
+
     librdf_init_storage_sqlite_mro(world);
     {
         const char *options = "new='yes',contexts='yes',synchronous='off'";
@@ -107,14 +109,54 @@ static char *test_sparql()
             }
             {
                 librdf_query *rdf_query =
-                    librdf_new_query(world, "sparql", NULL, (const unsigned char *)query_string, NULL);
+                    librdf_new_query(world, "sparql", NULL, query_string, NULL);
                 MUAssert(rdf_query, "Failed to create query");
                 {
                     librdf_query_results *res = librdf_query_execute(rdf_query, model);
-                    if( res ) {
-                        // display query results to console in CSV format
-                        librdf_query_results_to_file_handle2(res, stdout, "csv", NULL, NULL, NULL);
+                    MUAssert(0 == librdf_query_results_get_count(res), "expected 0 so far");
+
+                    {   // 1st result row
+                        MUAssert(0 == librdf_query_results_next(res), "oha 0");
+                        MUAssert(1 == librdf_query_results_get_count(res), "expected 1 so far");
+                        MUAssert(2 == librdf_query_results_get_bindings_count(res), "why has this to be 2?");
+                        MUAssert(0 == strcmp("author", librdf_query_results_get_binding_name(res, 0)), "ouch");
+                        {
+                            librdf_node *nod = librdf_query_results_get_binding_value(res, 0);
+                            MUAssert(0 == strcmp("http://dbpedia.org/resource/Donald_Knuth", (char*)librdf_uri_as_string(librdf_node_get_uri(nod))), "uhu");
+                            librdf_free_node(nod);
+                        }
+                        MUAssert(0 == strcmp("title", librdf_query_results_get_binding_name(res, 1)), "ouch");
+                        {
+                            librdf_node *nod = librdf_query_results_get_binding_value(res, 1);
+                            MUAssert(0 == strcmp("The Art of Computer Programming", (char*)librdf_node_get_literal_value(nod)), "uhu");
+                            librdf_free_node(nod);
+                        }
+                        MUAssert(NULL == librdf_query_results_get_binding_name(res, 2), "ouch");
+                        // fprintf(stdout, "name: %s\n", librdf_query_results_get_binding_value(res, 2) );
                     }
+                    {   // 2nd result row
+                        MUAssert(0 == librdf_query_results_next(res), "oha 0");
+                        MUAssert(2 == librdf_query_results_get_count(res), "expected 2 so far");
+                        MUAssert(2 == librdf_query_results_get_bindings_count(res), "why has this to be 2?");
+                        MUAssert(0 == strcmp("author", librdf_query_results_get_binding_name(res, 0)), "ouch");
+                        {
+                            librdf_node *nod = librdf_query_results_get_binding_value(res, 0);
+                            MUAssert(0 == strcmp("http://dbpedia.org/resource/Plato", (char*)librdf_uri_as_string(librdf_node_get_uri(nod))), "uhu");
+                            librdf_free_node(nod);
+                        }
+                        MUAssert(0 == strcmp("title", librdf_query_results_get_binding_name(res, 1)), "ouch");
+                        {
+                            librdf_node *nod = librdf_query_results_get_binding_value(res, 1);
+                            MUAssert(0 == strcmp("Republic", (char*)librdf_node_get_literal_value(nod)), "uhu");
+                            librdf_free_node(nod);
+                        }
+                        MUAssert(NULL == librdf_query_results_get_binding_name(res, 2), "ouch");
+                        // fprintf(stdout, "name: %s\n", librdf_query_results_get_binding_value(res, 0) );
+                    }
+                    {   // 3rd result row
+                        MUAssert(0 != librdf_query_results_next(res), "oha 2");
+                    }
+
                     librdf_free_query_results(res);
                 }
                 librdf_free_query(rdf_query);
