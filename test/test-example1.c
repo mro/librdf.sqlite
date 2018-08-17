@@ -1,7 +1,7 @@
 //
 // test-example1.c
 //
-// Copyright (c) 2015-2015, Marcus Rohrmoser mobile Software, http://mro.name/me
+// Copyright (c) 2015-2018, Marcus Rohrmoser mobile Software, http://mro.name/~me
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are permitted
@@ -23,7 +23,12 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 #define LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE 1
+// #define VANILLA
+#ifdef VANILLA
+#include <librdf.h>
+#else
 #include "../rdf_storage_sqlite_mro.h"
+#endif
 
 #include "mtest.h"
 #include <unistd.h>
@@ -61,16 +66,23 @@ static char *_main(int argc, char *argv[])
 
     librdf_world *world = librdf_new_world();
     librdf_world_open(world);
+#ifndef VANILLA
     librdf_init_storage_sqlite_mro(world);
+#endif
     raptor_world *raptor_world_ptr = librdf_world_get_raptor(world);
 
     librdf_uri *uri = librdf_new_uri(world, (const unsigned char *)argv[1]);
     MUAssert(uri, "Failed to create URI");
 
+#ifdef VANILLA
+    librdf_storage *storage = librdf_new_storage(world, "sqlite", "tmp/test-example1.sqlite",
+                                                 "new='yes', contexts='no', synchronous='off'");
+#else
     librdf_storage *storage = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-example1.sqlite",
-                                                 "new='on', contexts='no', synchronous='off'");
+                                                 "new='yes', contexts='no', synchronous='off'");
+#endif
     MUAssert(storage, "Failed to create storage");
-    librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN, true);
+    // librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN, true);
 
     librdf_model *model = librdf_new_model(world, storage, NULL);
     MUAssert(model, "Failed to create model");
@@ -95,7 +107,7 @@ static char *_main(int argc, char *argv[])
     }
 
     // now as we're done inserting: start profiling..
-    librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, true);
+    // librdf_storage_set_feature_mro_bool(storage, LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, true);
 
     {
         librdf_statement *statement2 =
@@ -111,7 +123,7 @@ static char *_main(int argc, char *argv[])
         librdf_free_statement(statement2);
     }
     /* Print out the model */
-    if( false ) {
+    if( 0 ) {
         fprintf(stdout, "%s: Resulting model is:\n", program);
         raptor_iostream *iostr = raptor_new_iostream_to_file_handle(raptor_world_ptr, stdout);
         librdf_model_write(model, iostr);

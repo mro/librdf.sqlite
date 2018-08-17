@@ -1,7 +1,7 @@
 //
 // test-issue17.c
 //
-// Copyright (c) 2015-2015, Marcus Rohrmoser mobile Software, http://mro.name/me
+// Copyright (c) 2015-2018, Marcus Rohrmoser mobile Software, http://mro.name/~me
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are permitted
@@ -23,7 +23,12 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 #define LIBRDF_STORAGE_SQLITE_MRO_CONVENIENCE 1
+#define VANILLA
+#ifdef VANILLA
+#include <librdf.h>
+#else
 #include "../rdf_storage_sqlite_mro.h"
+#endif
 
 #include "mtest.h"
 #include <unistd.h>
@@ -76,11 +81,16 @@ static char *test_sparql()
     librdf_world *world = librdf_new_world();
     MUAssert(0 != sizeof(query_string), "uhu");
 
+#ifndef VANILLA
     librdf_init_storage_sqlite_mro(world);
+#endif
     {
-        const char *options = "new='yes',contexts='yes',synchronous='off'";
-        librdf_storage *store =
-            librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-issue17.sqlite", options);
+        const char options[] = "new='yes',contexts='yes',synchronous='off'";
+#ifdef VANILLA
+        librdf_storage *store = librdf_new_storage(world, "sqlite", "tmp/test-issue17.sqlite", options);
+#else
+        librdf_storage *store = librdf_new_storage(world, LIBRDF_STORAGE_SQLITE_MRO, "tmp/test-issue17.sqlite", options);
+#endif
         MUAssert(store, "Failed to create store");
         {
             librdf_model *model = librdf_new_model(world, store, NULL);
