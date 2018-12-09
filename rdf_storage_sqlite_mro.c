@@ -1229,7 +1229,7 @@ static librdf_node *pub_get_feature(librdf_storage *storage, librdf_uri *feature
     librdf_uri *uri_xsd_unsignedShort = librdf_new_uri(get_world(storage), (str_uri_t)"http://www.w3.org/2000/10/XMLSchema#" "unsignedShort");
 
     if( !ret && 0 == strcmp(LIBRDF_MODEL_FEATURE_CONTEXTS, feat) )
-        ret = librdf_new_node_from_typed_literal(get_world(storage), (str_lit_val_t)(false ? "true" : "false"), NULL, uri_xsd_boolean);
+        ret = librdf_new_node_from_typed_literal(get_world(storage), (str_lit_val_t)(true ? "1" : "0"), NULL, uri_xsd_boolean);
     if( !ret && 0 == strcmp( (char *)LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_PROFILE, feat ) )
         ret = librdf_new_node_from_typed_literal(get_world(storage), (str_lit_val_t)(db_ctx->do_profile ? "true" : "false"), NULL, uri_xsd_boolean);
     if( !ret && 0 == strcmp( (char *)LIBRDF_STORAGE_SQLITE_MRO_FEATURE_SQLITE3_EXPLAIN_QUERY_PLAN, (char *)feat ) )
