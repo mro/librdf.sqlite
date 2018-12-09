@@ -1478,6 +1478,89 @@ static void pub_iter_finished(void *_ctx)
 }
 
 
+typedef struct
+{
+    librdf_storage *storage;
+    librdf_node *context;
+
+    sqlite3_stmt *stmt;
+    sqlite_rc_t rc;
+    bool dirty;
+}
+context_iterator_t;
+
+
+static int context_iter_is_end(void *_ctx)
+{
+    assert(_ctx && "context mustn't be NULL");
+    context_iterator_t *ctx = (context_iterator_t *)_ctx;
+    return SQLITE_ROW != ctx->rc;
+}
+
+
+static int context_iter_get_next(void *_ctx)
+{
+    assert(_ctx && "context mustn't be NULL");
+    context_iterator_t *ctx = (context_iterator_t *)_ctx;
+    if( context_iter_is_end(ctx) )
+        return RET_ERROR;
+    ctx->dirty = true;
+    ctx->rc = sqlite3_step(ctx->stmt);
+    if( context_iter_is_end(ctx) )
+        return RET_ERROR;
+    return RET_OK;
+}
+
+
+static void *context_iter_get_context(void *_ctx, const int _flags)
+{
+    assert(_ctx && "context mustn't be NULL");
+    const librdf_iterator_get_method_flags flags = (librdf_iterator_get_method_flags)_flags;
+    context_iterator_t *ctx = (context_iterator_t *)_ctx;
+
+    switch( flags ) {
+    case LIBRDF_ITERATOR_GET_METHOD_GET_OBJECT:
+        break;
+    case LIBRDF_ITERATOR_GET_METHOD_GET_CONTEXT:
+        return NULL;
+    default:
+        librdf_log(get_world(ctx->storage), 0, LIBRDF_LOG_ERROR, LIBRDF_FROM_STORAGE, NULL, "Unknown iterator method flag %d", flags);
+        return NULL;
+    }
+
+    if( ctx->dirty && !context_iter_is_end(_ctx) ) {
+        assert(ctx->statement && "statement mustn't be NULL");
+        librdf_world *w = get_world(ctx->storage);
+        sqlite3_stmt *stm = ctx->stmt;
+        librdf_node *node = NULL;
+        const str_uri_t uri = column_uri_string(stm, 0);
+        if( uri )
+            node = librdf_new_node_from_uri_string(w, uri);
+        if( ctx->context )
+            librdf_free_node(ctx->context);
+
+        ctx->context = node;
+        ctx->dirty = false;
+    }
+
+    return ctx->context;
+}
+
+
+static void context_iter_finished(void *_ctx)
+{
+    assert(_ctx && "context mustn't be NULL");
+    context_iterator_t *ctx = (context_iterator_t *)_ctx;
+    if( ctx->context )
+        librdf_free_node(ctx->context);
+
+    librdf_storage_remove_reference(ctx->storage);
+    sqlite3_finalize(ctx->stmt);
+
+    LIBRDF_FREE(iterator_t *, ctx);
+}
+
+
 #pragma mark Query & Iterate
 
 
@@ -1492,8 +1575,24 @@ static int pub_size(librdf_storage *storage)
 
 static librdf_iterator *pub_get_contexts(librdf_storage *storage)
 {
-    assert(0 && "not implemented yet.");
-    return NULL;
+    instance_t *db_ctx = get_instance(storage);
+
+    context_iterator_t *iter = LIBRDF_CALLOC(context_iterator_t*, sizeof(context_iterator_t), 1);
+    iter->storage = storage;
+    iter->stmt = prep_stmt(db_ctx->db, &(iter->stmt), "SELECT uri FROM c_uris");
+    if( !iter->stmt ) {
+        LIBRDF_FREE(context_iterator_t*, iter);
+        return NULL;
+    }
+    iter->rc = sqlite3_step(iter->stmt);
+    iter->dirty = true;
+    librdf_storage_add_reference(iter->storage);
+
+    librdf_iterator *iterator = librdf_new_iterator(get_world(storage), iter, &context_iter_is_end, &context_iter_get_next, &context_iter_get_context, &context_iter_finished);
+    if( !iterator ) {
+        context_iter_finished(iter);
+    }
+    return iterator;
 }
 
 
