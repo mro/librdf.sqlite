@@ -1529,7 +1529,7 @@ static void *context_iter_get_context(void *_ctx, const int _flags)
     }
 
     if( ctx->dirty && !context_iter_is_end(_ctx) ) {
-        assert(ctx->statement && "statement mustn't be NULL");
+        assert(ctx->context && "context mustn't be NULL");
         librdf_world *w = get_world(ctx->storage);
         sqlite3_stmt *stm = ctx->stmt;
         librdf_node *node = NULL;
